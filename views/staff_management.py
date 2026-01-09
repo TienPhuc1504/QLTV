@@ -1,0 +1,344 @@
+"""
+Staff Management - Quản lý nhân viên (chỉ Admin)
+"""
+import customtkinter as ctk
+from tkinter import messagebox, ttk
+import tkinter as tk
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from database import get_all_staff, add_staff, update_staff, delete_staff
+
+
+class StaffManagement(ctk.CTkFrame):
+    """Giao diện quản lý nhân viên"""
+    
+    def __init__(self, parent, user: dict):
+        super().__init__(parent, fg_color="transparent")
+        
+        self.user = user
+        self.selected_staff = None
+        
+        self.create_widgets()
+        self.load_staff()
+        
+    def create_widgets(self):
+        """Tạo các widget"""
+        # Header
+        header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        header_frame.pack(fill="x", padx=20, pady=(20, 10))
+        
+        title = ctk.CTkLabel(
+            header_frame,
+            text="👔 Quản lý Nhân viên",
+            font=ctk.CTkFont(size=24, weight="bold")
+        )
+        title.pack(side="left")
+        
+        # Add button
+        add_btn = ctk.CTkButton(
+            header_frame,
+            text="➕ Thêm nhân viên",
+            command=self.show_add_dialog,
+            width=140
+        )
+        add_btn.pack(side="right")
+        
+        # Search frame
+        search_frame = ctk.CTkFrame(self, fg_color="transparent")
+        search_frame.pack(fill="x", padx=20, pady=10)
+        
+        self.search_entry = ctk.CTkEntry(
+            search_frame,
+            placeholder_text="🔍 Tìm kiếm theo tên, mã nhân viên...",
+            width=350
+        )
+        self.search_entry.pack(side="left")
+        self.search_entry.bind('<KeyRelease>', lambda e: self.search_staff())
+        
+        refresh_btn = ctk.CTkButton(
+            search_frame,
+            text="🔄",
+            command=self.load_staff,
+            width=40
+        )
+        refresh_btn.pack(side="left", padx=10)
+        
+        # Table frame
+        table_frame = ctk.CTkFrame(self)
+        table_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        # Treeview
+        columns = ("ma_nd", "ma_nhan_vien", "ho_ten", "so_dt", "email", "dia_chi")
+        
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=12)
+        
+        # Column headings
+        self.tree.heading("ma_nd", text="ID")
+        self.tree.heading("ma_nhan_vien", text="Mã NV")
+        self.tree.heading("ho_ten", text="Họ tên")
+        self.tree.heading("so_dt", text="Số điện thoại")
+        self.tree.heading("email", text="Email")
+        self.tree.heading("dia_chi", text="Địa chỉ")
+        
+        # Column widths
+        self.tree.column("ma_nd", width=50, anchor="center")
+        self.tree.column("ma_nhan_vien", width=100, anchor="center")
+        self.tree.column("ho_ten", width=180)
+        self.tree.column("so_dt", width=120, anchor="center")
+        self.tree.column("email", width=200)
+        self.tree.column("dia_chi", width=200)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Bind selection
+        self.tree.bind('<<TreeviewSelect>>', self.on_select)
+        self.tree.bind('<Double-1>', lambda e: self.show_edit_dialog())
+        
+        # Action buttons
+        action_frame = ctk.CTkFrame(self, fg_color="transparent")
+        action_frame.pack(fill="x", padx=20, pady=10)
+        
+        self.edit_btn = ctk.CTkButton(
+            action_frame,
+            text="✏️ Sửa",
+            command=self.show_edit_dialog,
+            width=100,
+            state="disabled"
+        )
+        self.edit_btn.pack(side="left", padx=5)
+        
+        self.delete_btn = ctk.CTkButton(
+            action_frame,
+            text="🗑️ Xóa",
+            command=self.delete_selected,
+            width=100,
+            fg_color="#dc3545",
+            hover_color="#c82333",
+            state="disabled"
+        )
+        self.delete_btn.pack(side="left", padx=5)
+        
+        # Note
+        note_label = ctk.CTkLabel(
+            action_frame,
+            text="💡 Tài khoản mặc định: mã nhân viên/mã nhân viên",
+            text_color="gray",
+            font=ctk.CTkFont(size=12)
+        )
+        note_label.pack(side="right")
+        
+    def load_staff(self):
+        """Tải danh sách nhân viên"""
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        staff_list = get_all_staff()
+        
+        for staff in staff_list:
+            self.tree.insert("", "end", values=(
+                staff['ma_nd'],
+                staff['ma_nhan_vien'],
+                staff['ho_ten'],
+                staff['so_dt'] or "N/A",
+                staff['email'] or "N/A",
+                staff['dia_chi'] or "N/A"
+            ))
+            
+    def search_staff(self):
+        """Tìm kiếm nhân viên"""
+        search_term = self.search_entry.get()
+        
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        staff_list = get_all_staff(search_term)
+        
+        for staff in staff_list:
+            self.tree.insert("", "end", values=(
+                staff['ma_nd'],
+                staff['ma_nhan_vien'],
+                staff['ho_ten'],
+                staff['so_dt'] or "N/A",
+                staff['email'] or "N/A",
+                staff['dia_chi'] or "N/A"
+            ))
+            
+    def on_select(self, event):
+        """Xử lý khi chọn item"""
+        selection = self.tree.selection()
+        if selection:
+            item = self.tree.item(selection[0])
+            self.selected_staff = item['values'][0]  # ma_nd
+            self.edit_btn.configure(state="normal")
+            self.delete_btn.configure(state="normal")
+        else:
+            self.selected_staff = None
+            self.edit_btn.configure(state="disabled")
+            self.delete_btn.configure(state="disabled")
+            
+    def show_add_dialog(self):
+        """Hiện dialog thêm nhân viên"""
+        dialog = StaffDialog(self, "Thêm nhân viên mới")
+        self.wait_window(dialog)
+        
+        if dialog.result:
+            try:
+                add_staff(**dialog.result)
+                messagebox.showinfo("Thành công", "Thêm nhân viên thành công!\nTài khoản: mã NV/mã NV")
+                self.load_staff()
+            except Exception as e:
+                messagebox.showerror("Lỗi", f"Không thể thêm: {str(e)}")
+                
+    def show_edit_dialog(self):
+        """Hiện dialog sửa nhân viên"""
+        if not self.selected_staff:
+            return
+            
+        # Lấy thông tin từ tree
+        selection = self.tree.selection()
+        if not selection:
+            return
+            
+        item = self.tree.item(selection[0])
+        values = item['values']
+        
+        staff_data = {
+            'ma_nd': values[0],
+            'ma_nhan_vien': values[1],
+            'ho_ten': values[2],
+            'so_dt': values[3] if values[3] != "N/A" else "",
+            'email': values[4] if values[4] != "N/A" else "",
+            'dia_chi': values[5] if values[5] != "N/A" else ""
+        }
+        
+        dialog = StaffDialog(self, "Sửa thông tin nhân viên", staff_data)
+        self.wait_window(dialog)
+        
+        if dialog.result:
+            try:
+                update_staff(self.selected_staff, **dialog.result)
+                messagebox.showinfo("Thành công", "Cập nhật thành công!")
+                self.load_staff()
+            except Exception as e:
+                messagebox.showerror("Lỗi", f"Không thể cập nhật: {str(e)}")
+                
+    def delete_selected(self):
+        """Xóa nhân viên đã chọn"""
+        if not self.selected_staff:
+            return
+            
+        if messagebox.askyesno("Xác nhận", "Bạn có chắc chắn muốn xóa nhân viên này?"):
+            try:
+                delete_staff(self.selected_staff)
+                messagebox.showinfo("Thành công", "Xóa nhân viên thành công!")
+                self.load_staff()
+                self.selected_staff = None
+            except Exception as e:
+                messagebox.showerror("Lỗi", f"Không thể xóa: {str(e)}")
+
+
+class StaffDialog(ctk.CTkToplevel):
+    """Dialog thêm/sửa nhân viên"""
+    
+    def __init__(self, parent, title: str, staff: dict = None):
+        super().__init__(parent)
+        
+        self.title(title)
+        self.geometry("400x380")
+        self.transient(parent)
+        self.grab_set()
+        
+        self.staff = staff
+        self.result = None
+        
+        self.create_widgets()
+        
+        if staff:
+            self.populate_fields()
+            
+    def create_widgets(self):
+        """Tạo các widget"""
+        frame = ctk.CTkFrame(self, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Mã nhân viên (chỉ khi thêm mới)
+        if not self.staff:
+            ctk.CTkLabel(frame, text="Mã nhân viên: *", anchor="w").pack(fill="x", pady=(0, 5))
+            self.code_entry = ctk.CTkEntry(frame, placeholder_text="VD: NV002")
+            self.code_entry.pack(fill="x", pady=(0, 10))
+        
+        # Họ tên
+        ctk.CTkLabel(frame, text="Họ tên: *", anchor="w").pack(fill="x", pady=(0, 5))
+        self.name_entry = ctk.CTkEntry(frame)
+        self.name_entry.pack(fill="x", pady=(0, 10))
+        
+        # Địa chỉ
+        ctk.CTkLabel(frame, text="Địa chỉ:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.address_entry = ctk.CTkEntry(frame)
+        self.address_entry.pack(fill="x", pady=(0, 10))
+        
+        # Số điện thoại
+        ctk.CTkLabel(frame, text="Số điện thoại:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.phone_entry = ctk.CTkEntry(frame)
+        self.phone_entry.pack(fill="x", pady=(0, 10))
+        
+        # Email
+        ctk.CTkLabel(frame, text="Email:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.email_entry = ctk.CTkEntry(frame)
+        self.email_entry.pack(fill="x", pady=(0, 10))
+        
+        # Buttons
+        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=20)
+        
+        ctk.CTkButton(btn_frame, text="Hủy", command=self.destroy, 
+                     fg_color="gray", width=100).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="Lưu", command=self.save, width=100).pack(side="right", padx=5)
+        
+    def populate_fields(self):
+        """Điền dữ liệu khi sửa"""
+        self.name_entry.insert(0, self.staff['ho_ten'])
+        self.address_entry.insert(0, self.staff['dia_chi'] or "")
+        self.phone_entry.insert(0, self.staff['so_dt'] or "")
+        self.email_entry.insert(0, self.staff['email'] or "")
+        
+    def save(self):
+        """Lưu thông tin"""
+        ho_ten = self.name_entry.get().strip()
+        
+        if not ho_ten:
+            messagebox.showwarning("Cảnh báo", "Vui lòng nhập họ tên!")
+            return
+        
+        if self.staff:
+            # Update
+            self.result = {
+                'ho_ten': ho_ten,
+                'dia_chi': self.address_entry.get().strip() or None,
+                'so_dt': self.phone_entry.get().strip() or None,
+                'email': self.email_entry.get().strip() or None
+            }
+        else:
+            # Add new
+            ma_nhan_vien = self.code_entry.get().strip()
+            if not ma_nhan_vien:
+                messagebox.showwarning("Cảnh báo", "Vui lòng nhập mã nhân viên!")
+                return
+                
+            self.result = {
+                'ho_ten': ho_ten,
+                'dia_chi': self.address_entry.get().strip() or None,
+                'so_dt': self.phone_entry.get().strip() or None,
+                'email': self.email_entry.get().strip() or None,
+                'ma_nhan_vien': ma_nhan_vien.upper()
+            }
+            
+        self.destroy()

@@ -1,0 +1,10 @@
+# Thư viện cần thiết cho ứng dụng Quản lý Thư viện
+
+# GUI Framework
+customtkinter>=5.2.0
+
+# PDF Report Generation
+reportlab>=4.0.0
+
+# Pillow cho xử lý hình ảnh (nếu cần)
+Pillow>=10.0.0
