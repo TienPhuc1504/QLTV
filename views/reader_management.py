@@ -13,6 +13,7 @@ from database import (get_all_readers, get_reader_by_id, add_reader,
                       update_reader, delete_reader, update_reader_card,
                       get_reader_borrow_history)
 from utils.report_generator import generate_reader_card
+from utils import treeview_sort_column
 
 
 class ReaderManagement(ctk.CTkFrame):
@@ -74,26 +75,29 @@ class ReaderManagement(ctk.CTkFrame):
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
         # Treeview
-        columns = ("ma_nd", "ma_doc_gia", "ho_ten", "so_dt", "email", "ngay_dk", "trang_thai_the")
+        columns = ("ma_doc_gia", "ho_ten", "so_dt", "email", "ngay_dk", "trang_thai_the")
         
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=12)
         
-        # Column headings
-        self.tree.heading("ma_nd", text="ID")
-        self.tree.heading("ma_doc_gia", text="Mã đọc giả")
-        self.tree.heading("ho_ten", text="Họ tên")
-        self.tree.heading("so_dt", text="Số điện thoại")
-        self.tree.heading("email", text="Email")
-        self.tree.heading("ngay_dk", text="Ngày đăng ký")
-        self.tree.heading("trang_thai_the", text="Trạng thái thẻ")
+        # Column headings with sorting
+        headings = {
+            "ma_doc_gia": "Mã đọc giả",
+            "ho_ten": "Họ tên",
+            "so_dt": "Số điện thoại",
+            "email": "Email",
+            "ngay_dk": "Ngày đăng ký",
+            "trang_thai_the": "Trạng thái thẻ"
+        }
+        for col, text in headings.items():
+            self.tree.heading(col, text=text, 
+                            command=lambda c=col: treeview_sort_column(self.tree, c, False))
         
         # Column widths
-        self.tree.column("ma_nd", width=50, anchor="center")
         self.tree.column("ma_doc_gia", width=100, anchor="center")
-        self.tree.column("ho_ten", width=150)
-        self.tree.column("so_dt", width=110, anchor="center")
-        self.tree.column("email", width=180)
-        self.tree.column("ngay_dk", width=100, anchor="center")
+        self.tree.column("ho_ten", width=180)
+        self.tree.column("so_dt", width=120, anchor="center")
+        self.tree.column("email", width=200)
+        self.tree.column("ngay_dk", width=110, anchor="center")
         self.tree.column("trang_thai_the", width=120, anchor="center")
         
         # Scrollbar
@@ -105,7 +109,7 @@ class ReaderManagement(ctk.CTkFrame):
         
         # Bind selection
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
-        self.tree.bind('<Double-1>', lambda e: self.show_edit_dialog())
+        self.tree.bind('<Double-1>', self.on_double_click)
         
         # Action buttons
         action_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -175,8 +179,7 @@ class ReaderManagement(ctk.CTkFrame):
             }
             trang_thai = trang_thai_map.get(reader['trang_thai_the'], reader['trang_thai_the'] or 'N/A')
             
-            self.tree.insert("", "end", values=(
-                reader['ma_nd'],
+            self.tree.insert("", "end", iid=reader['ma_nd'], values=(
                 reader['ma_doc_gia'],
                 reader['ho_ten'],
                 reader['so_dt'] or "N/A",
@@ -202,8 +205,7 @@ class ReaderManagement(ctk.CTkFrame):
             }
             trang_thai = trang_thai_map.get(reader['trang_thai_the'], reader['trang_thai_the'] or 'N/A')
             
-            self.tree.insert("", "end", values=(
-                reader['ma_nd'],
+            self.tree.insert("", "end", iid=reader['ma_nd'], values=(
                 reader['ma_doc_gia'],
                 reader['ho_ten'],
                 reader['so_dt'] or "N/A",
@@ -216,8 +218,7 @@ class ReaderManagement(ctk.CTkFrame):
         """Xử lý khi chọn item"""
         selection = self.tree.selection()
         if selection:
-            item = self.tree.item(selection[0])
-            self.selected_reader = item['values'][0]  # ma_nd
+            self.selected_reader = int(selection[0])  # iid là ma_nd
             self.edit_btn.configure(state="normal")
             self.delete_btn.configure(state="normal")
             self.card_btn.configure(state="normal")
@@ -229,8 +230,12 @@ class ReaderManagement(ctk.CTkFrame):
             self.delete_btn.configure(state="disabled")
             self.card_btn.configure(state="disabled")
             self.history_btn.configure(state="disabled")
-            self.print_card_btn.configure(state="disabled")
-            
+            self.print_card_btn.configure(state="disabled")    
+    def on_double_click(self, event):
+        """Xử lý double-click - chỉ mở dialog nếu click vào dòng dữ liệu"""
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            self.show_edit_dialog()            
     def show_add_dialog(self):
         """Hiện dialog thêm đọc giả"""
         dialog = ReaderDialog(self, "Thêm đọc giả mới")

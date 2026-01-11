@@ -146,6 +146,32 @@ def init_database():
         )
     """)
     
+    # Bảng YEU_CAU_MUON (Yêu cầu mượn sách từ đọc giả)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS YEU_CAU_MUON (
+            ma_yeu_cau INTEGER PRIMARY KEY AUTOINCREMENT,
+            ma_nd_doc_gia INTEGER NOT NULL,
+            ma_sach INTEGER NOT NULL,
+            ngay_yeu_cau DATE NOT NULL,
+            so_ngay_muon_de_xuat INTEGER NOT NULL,
+            ghi_chu TEXT,
+            trang_thai VARCHAR(20) NOT NULL CHECK(trang_thai IN ('CHO_DUYET', 'CHO_LAY_SACH', 'DA_LAY', 'TU_CHOI', 'DA_HUY')),
+            ma_nd_xu_ly INTEGER,
+            ngay_xu_ly DATE,
+            ly_do_tu_choi TEXT,
+            so_ngay_muon_chinh_thuc INTEGER,
+            FOREIGN KEY (ma_nd_doc_gia) REFERENCES DOC_GIA(ma_nd),
+            FOREIGN KEY (ma_sach) REFERENCES SACH(ma_sach),
+            FOREIGN KEY (ma_nd_xu_ly) REFERENCES NGUOI_DUNG(ma_nd)
+        )
+    """)
+    
+    # Thêm cột so_ngay_muon_chinh_thuc nếu chưa có (cho database cũ)
+    try:
+        cursor.execute("ALTER TABLE YEU_CAU_MUON ADD COLUMN so_ngay_muon_chinh_thuc INTEGER")
+    except:
+        pass  # Cột đã tồn tại
+    
     conn.commit()
     conn.close()
 
@@ -572,6 +598,23 @@ def delete_reader(ma_nd: int):
 
 # ============ QUẢN LÝ NHÂN VIÊN ============
 
+def get_staff_by_id(ma_nd: int):
+    """Lấy thông tin nhân viên theo mã người dùng"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT nd.*, nv.ma_nhan_vien
+        FROM NGUOI_DUNG nd
+        JOIN NHAN_VIEN nv ON nd.ma_nd = nv.ma_nd
+        WHERE nd.ma_nd = ?
+    """, (ma_nd,))
+    
+    staff = cursor.fetchone()
+    conn.close()
+    return dict(staff) if staff else None
+
+
 def get_all_staff(search_term: str = ""):
     """Lấy danh sách nhân viên"""
     conn = get_connection()
@@ -951,6 +994,339 @@ def get_borrow_statistics():
     
     conn.close()
     return stats
+
+
+# ==================== YÊU CẦU MƯỢN SÁCH ====================
+
+def create_borrow_request(ma_nd_doc_gia: int, ma_sach: int, so_ngay_muon_de_xuat: int, ghi_chu: str = None):
+    """Tạo yêu cầu mượn sách từ đọc giả"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Kiểm tra số ngày hợp lệ
+    if so_ngay_muon_de_xuat <= 0 or so_ngay_muon_de_xuat > 30:
+        conn.close()
+        raise Exception("Số ngày mượn phải từ 1-30 ngày!")
+    
+    # Kiểm tra đọc giả đã mượn sách này chưa (và chưa trả)
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM PHIEU_MUON_TRA 
+        WHERE ma_nd_doc_gia = ? AND ma_sach = ? AND trang_thai_phieu = 'DANG_MUON'
+    """, (ma_nd_doc_gia, ma_sach))
+    
+    if cursor.fetchone()['count'] > 0:
+        conn.close()
+        raise Exception("Bạn đang mượn sách này! Vui lòng trả sách trước khi mượn lại.")
+    
+    # Kiểm tra đã có yêu cầu chờ duyệt cho sách này chưa
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM YEU_CAU_MUON 
+        WHERE ma_nd_doc_gia = ? AND ma_sach = ? AND trang_thai = 'CHO_DUYET'
+    """, (ma_nd_doc_gia, ma_sach))
+    
+    if cursor.fetchone()['count'] > 0:
+        conn.close()
+        raise Exception("Bạn đã có yêu cầu mượn sách này đang chờ duyệt!")
+    
+    # Kiểm tra sách có khả dụng không
+    cursor.execute("""
+        SELECT s.trang_thai_sach, s.loai_sach, sg.so_luong
+        FROM SACH s
+        LEFT JOIN SACH_GIAY sg ON s.ma_sach = sg.ma_sach
+        WHERE s.ma_sach = ?
+    """, (ma_sach,))
+    
+    sach = cursor.fetchone()
+    if not sach:
+        conn.close()
+        raise Exception("Không tìm thấy sách!")
+    
+    if sach['trang_thai_sach'] in ['HONG', 'MAT']:
+        conn.close()
+        raise Exception("Sách không khả dụng (hỏng hoặc mất)!")
+    
+    if sach['loai_sach'] == 'SACH_GIAY':
+        if sach['so_luong'] is None or sach['so_luong'] <= 0:
+            conn.close()
+            raise Exception("Sách đã hết! Vui lòng chọn sách khác.")
+    
+    ngay_yeu_cau = datetime.now().strftime('%Y-%m-%d')
+    
+    cursor.execute("""
+        INSERT INTO YEU_CAU_MUON 
+        (ma_nd_doc_gia, ma_sach, ngay_yeu_cau, so_ngay_muon_de_xuat, ghi_chu, trang_thai)
+        VALUES (?, ?, ?, ?, ?, 'CHO_DUYET')
+    """, (ma_nd_doc_gia, ma_sach, ngay_yeu_cau, so_ngay_muon_de_xuat, ghi_chu))
+    
+    ma_yeu_cau = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    return ma_yeu_cau
+
+
+def get_all_borrow_requests(status: str = None, search_term: str = ""):
+    """Lấy danh sách yêu cầu mượn sách (cho nhân viên/admin)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    query = """
+        SELECT yc.*, 
+               nd.ho_ten as ten_doc_gia, nd.so_dt, nd.email,
+               dg.ma_doc_gia,
+               s.tieu_de, s.tac_gia, s.loai_sach,
+               tl.ten_the_loai,
+               nd2.ho_ten as nguoi_xu_ly
+        FROM YEU_CAU_MUON yc
+        JOIN NGUOI_DUNG nd ON yc.ma_nd_doc_gia = nd.ma_nd
+        JOIN DOC_GIA dg ON nd.ma_nd = dg.ma_nd
+        JOIN SACH s ON yc.ma_sach = s.ma_sach
+        LEFT JOIN THE_LOAI_SACH tl ON s.ma_the_loai = tl.ma_the_loai
+        LEFT JOIN NGUOI_DUNG nd2 ON yc.ma_nd_xu_ly = nd2.ma_nd
+        WHERE 1=1
+    """
+    params = []
+    
+    if status:
+        query += " AND yc.trang_thai = ?"
+        params.append(status)
+    
+    if search_term:
+        query += """ AND (nd.ho_ten LIKE ? OR s.tieu_de LIKE ? OR dg.ma_doc_gia LIKE ?)"""
+        search_pattern = f"%{search_term}%"
+        params.extend([search_pattern, search_pattern, search_pattern])
+    
+    query += " ORDER BY yc.ngay_yeu_cau DESC, yc.ma_yeu_cau DESC"
+    
+    cursor.execute(query, params)
+    requests = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return requests
+
+
+def get_reader_borrow_requests(ma_nd_doc_gia: int):
+    """Lấy danh sách yêu cầu mượn của đọc giả"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT yc.*, 
+               s.tieu_de, s.tac_gia, s.loai_sach,
+               tl.ten_the_loai,
+               nd.ho_ten as nguoi_xu_ly
+        FROM YEU_CAU_MUON yc
+        JOIN SACH s ON yc.ma_sach = s.ma_sach
+        LEFT JOIN THE_LOAI_SACH tl ON s.ma_the_loai = tl.ma_the_loai
+        LEFT JOIN NGUOI_DUNG nd ON yc.ma_nd_xu_ly = nd.ma_nd
+        WHERE yc.ma_nd_doc_gia = ?
+        ORDER BY yc.ngay_yeu_cau DESC
+    """, (ma_nd_doc_gia,))
+    
+    requests = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    
+    return requests
+
+
+def approve_borrow_request(ma_yeu_cau: int, ma_nd_xu_ly: int, so_ngay_muon: int):
+    """Duyệt yêu cầu mượn sách (nhân viên/admin) - chuyển sang chờ lấy sách"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Kiểm tra số ngày hợp lệ
+    if so_ngay_muon <= 0 or so_ngay_muon > 30:
+        conn.close()
+        raise Exception("Số ngày mượn phải từ 1-30 ngày!")
+    
+    # Lấy thông tin yêu cầu
+    cursor.execute("""
+        SELECT yc.*, s.loai_sach, sg.so_luong, s.trang_thai_sach
+        FROM YEU_CAU_MUON yc
+        JOIN SACH s ON yc.ma_sach = s.ma_sach
+        LEFT JOIN SACH_GIAY sg ON s.ma_sach = sg.ma_sach
+        WHERE yc.ma_yeu_cau = ?
+    """, (ma_yeu_cau,))
+    
+    yeu_cau = cursor.fetchone()
+    if not yeu_cau:
+        conn.close()
+        raise Exception("Không tìm thấy yêu cầu!")
+    
+    if yeu_cau['trang_thai'] != 'CHO_DUYET':
+        conn.close()
+        raise Exception("Yêu cầu này đã được xử lý!")
+    
+    # Kiểm tra sách còn khả dụng không
+    if yeu_cau['trang_thai_sach'] in ['HONG', 'MAT']:
+        conn.close()
+        raise Exception("Sách không còn khả dụng!")
+    
+    if yeu_cau['loai_sach'] == 'SACH_GIAY':
+        if yeu_cau['so_luong'] is None or yeu_cau['so_luong'] <= 0:
+            conn.close()
+            raise Exception("Sách đã hết!")
+    
+    # Cập nhật trạng thái yêu cầu sang CHO_LAY_SACH
+    ngay_xu_ly = datetime.now().strftime('%Y-%m-%d')
+    cursor.execute("""
+        UPDATE YEU_CAU_MUON 
+        SET trang_thai = 'CHO_LAY_SACH', ma_nd_xu_ly = ?, ngay_xu_ly = ?, so_ngay_muon_chinh_thuc = ?
+        WHERE ma_yeu_cau = ?
+    """, (ma_nd_xu_ly, ngay_xu_ly, so_ngay_muon, ma_yeu_cau))
+    
+    conn.commit()
+    conn.close()
+    
+    return ma_yeu_cau
+
+
+def confirm_book_pickup(ma_yeu_cau: int, ma_nd_nhan_vien: int):
+    """Xác nhận đọc giả đã lấy sách - tạo phiếu mượn"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Lấy thông tin yêu cầu
+    cursor.execute("""
+        SELECT yc.*, s.loai_sach, sg.so_luong, s.trang_thai_sach
+        FROM YEU_CAU_MUON yc
+        JOIN SACH s ON yc.ma_sach = s.ma_sach
+        LEFT JOIN SACH_GIAY sg ON s.ma_sach = sg.ma_sach
+        WHERE yc.ma_yeu_cau = ?
+    """, (ma_yeu_cau,))
+    
+    yeu_cau = cursor.fetchone()
+    if not yeu_cau:
+        conn.close()
+        raise Exception("Không tìm thấy yêu cầu!")
+    
+    if yeu_cau['trang_thai'] != 'CHO_LAY_SACH':
+        conn.close()
+        raise Exception("Yêu cầu này chưa được duyệt hoặc đã lấy sách!")
+    
+    # Kiểm tra sách còn khả dụng không
+    if yeu_cau['trang_thai_sach'] in ['HONG', 'MAT']:
+        conn.close()
+        raise Exception("Sách không còn khả dụng!")
+    
+    if yeu_cau['loai_sach'] == 'SACH_GIAY':
+        if yeu_cau['so_luong'] is None or yeu_cau['so_luong'] <= 0:
+            conn.close()
+            raise Exception("Sách đã hết!")
+    
+    # Cập nhật trạng thái yêu cầu sang DA_LAY
+    cursor.execute("""
+        UPDATE YEU_CAU_MUON SET trang_thai = 'DA_LAY' WHERE ma_yeu_cau = ?
+    """, (ma_yeu_cau,))
+    
+    # Lấy số ngày mượn chính thức
+    so_ngay_muon = yeu_cau['so_ngay_muon_chinh_thuc'] or yeu_cau['so_ngay_muon_de_xuat']
+    
+    # Tạo phiếu mượn
+    ngay_muon = datetime.now()
+    ngay_hen_tra = ngay_muon + timedelta(days=so_ngay_muon)
+    
+    cursor.execute("""
+        INSERT INTO PHIEU_MUON_TRA 
+        (ma_nd_doc_gia, ma_nd_nhan_vien, ma_sach, ngay_muon, ngay_hen_tra, trang_thai_phieu)
+        VALUES (?, ?, ?, ?, ?, 'DANG_MUON')
+    """, (yeu_cau['ma_nd_doc_gia'], ma_nd_nhan_vien, yeu_cau['ma_sach'], 
+          ngay_muon.strftime('%Y-%m-%d'), ngay_hen_tra.strftime('%Y-%m-%d')))
+    
+    ma_phieu = cursor.lastrowid
+    
+    # Cập nhật số lượng sách giấy
+    if yeu_cau['loai_sach'] == 'SACH_GIAY':
+        cursor.execute("""
+            UPDATE SACH_GIAY SET so_luong = so_luong - 1 WHERE ma_sach = ?
+        """, (yeu_cau['ma_sach'],))
+        
+        # Cập nhật trạng thái sách nếu hết
+        cursor.execute("""
+            UPDATE SACH SET trang_thai_sach = 'DA_MUON' 
+            WHERE ma_sach = ? AND ma_sach IN (
+                SELECT ma_sach FROM SACH_GIAY WHERE so_luong = 0
+            )
+        """, (yeu_cau['ma_sach'],))
+    
+    conn.commit()
+    conn.close()
+    
+    return ma_phieu
+
+
+def reject_borrow_request(ma_yeu_cau: int, ma_nd_xu_ly: int, ly_do: str = None):
+    """Từ chối yêu cầu mượn sách"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT trang_thai FROM YEU_CAU_MUON WHERE ma_yeu_cau = ?
+    """, (ma_yeu_cau,))
+    
+    yeu_cau = cursor.fetchone()
+    if not yeu_cau:
+        conn.close()
+        raise Exception("Không tìm thấy yêu cầu!")
+    
+    if yeu_cau['trang_thai'] != 'CHO_DUYET':
+        conn.close()
+        raise Exception("Yêu cầu này đã được xử lý!")
+    
+    ngay_xu_ly = datetime.now().strftime('%Y-%m-%d')
+    cursor.execute("""
+        UPDATE YEU_CAU_MUON 
+        SET trang_thai = 'TU_CHOI', ma_nd_xu_ly = ?, ngay_xu_ly = ?, ly_do_tu_choi = ?
+        WHERE ma_yeu_cau = ?
+    """, (ma_nd_xu_ly, ngay_xu_ly, ly_do, ma_yeu_cau))
+    
+    conn.commit()
+    conn.close()
+
+
+def cancel_borrow_request(ma_yeu_cau: int, ma_nd_doc_gia: int):
+    """Hủy yêu cầu mượn sách (đọc giả tự hủy)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT trang_thai, ma_nd_doc_gia FROM YEU_CAU_MUON WHERE ma_yeu_cau = ?
+    """, (ma_yeu_cau,))
+    
+    yeu_cau = cursor.fetchone()
+    if not yeu_cau:
+        conn.close()
+        raise Exception("Không tìm thấy yêu cầu!")
+    
+    if yeu_cau['ma_nd_doc_gia'] != ma_nd_doc_gia:
+        conn.close()
+        raise Exception("Bạn không có quyền hủy yêu cầu này!")
+    
+    if yeu_cau['trang_thai'] != 'CHO_DUYET':
+        conn.close()
+        raise Exception("Chỉ có thể hủy yêu cầu đang chờ duyệt!")
+    
+    cursor.execute("""
+        UPDATE YEU_CAU_MUON SET trang_thai = 'DA_HUY' WHERE ma_yeu_cau = ?
+    """, (ma_yeu_cau,))
+    
+    conn.commit()
+    conn.close()
+
+
+def get_pending_requests_count():
+    """Đếm số yêu cầu đang chờ duyệt"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM YEU_CAU_MUON WHERE trang_thai = 'CHO_DUYET'
+    """)
+    
+    count = cursor.fetchone()['count']
+    conn.close()
+    
+    return count
 
 
 # Khởi tạo database khi import module

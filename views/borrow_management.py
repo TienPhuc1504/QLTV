@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from database import (get_all_borrows, get_borrow_by_id, create_borrow, return_book,
                       calculate_fine, get_all_readers, get_all_books, get_all_staff)
 from utils.report_generator import generate_borrow_receipt, generate_return_receipt
+from utils import treeview_sort_column
 
 
 class BorrowManagement(ctk.CTkFrame):
@@ -92,16 +93,21 @@ class BorrowManagement(ctk.CTkFrame):
         
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=12)
         
-        # Column headings
-        self.tree.heading("ma_phieu", text="Mã phiếu")
-        self.tree.heading("ma_doc_gia", text="Mã ĐG")
-        self.tree.heading("ten_doc_gia", text="Tên đọc giả")
-        self.tree.heading("tieu_de", text="Tên sách")
-        self.tree.heading("ngay_muon", text="Ngày mượn")
-        self.tree.heading("ngay_hen_tra", text="Hạn trả")
-        self.tree.heading("ngay_tra_thuc", text="Ngày trả")
-        self.tree.heading("trang_thai", text="Trạng thái")
-        self.tree.heading("tien_phat", text="Tiền phạt")
+        # Column headings with sorting
+        headings = {
+            "ma_phieu": "Mã phiếu",
+            "ma_doc_gia": "Mã ĐG",
+            "ten_doc_gia": "Tên đọc giả",
+            "tieu_de": "Tên sách",
+            "ngay_muon": "Ngày mượn",
+            "ngay_hen_tra": "Hạn trả",
+            "ngay_tra_thuc": "Ngày trả",
+            "trang_thai": "Trạng thái",
+            "tien_phat": "Tiền phạt"
+        }
+        for col, text in headings.items():
+            self.tree.heading(col, text=text, 
+                            command=lambda c=col: treeview_sort_column(self.tree, c, False))
         
         # Column widths
         self.tree.column("ma_phieu", width=70, anchor="center")
@@ -123,7 +129,7 @@ class BorrowManagement(ctk.CTkFrame):
         
         # Bind selection
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
-        self.tree.bind('<Double-1>', lambda e: self.show_detail_dialog())
+        self.tree.bind('<Double-1>', self.on_double_click)
         
         # Action buttons
         action_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -275,6 +281,12 @@ class BorrowManagement(ctk.CTkFrame):
             self.detail_btn.configure(state="disabled")
             self.print_borrow_btn.configure(state="disabled")
             self.print_return_btn.configure(state="disabled")
+    
+    def on_double_click(self, event):
+        """Xử lý double-click - chỉ mở dialog nếu click vào dòng dữ liệu"""
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            self.show_detail_dialog()
             
     def show_borrow_dialog(self):
         """Hiện dialog tạo phiếu mượn"""

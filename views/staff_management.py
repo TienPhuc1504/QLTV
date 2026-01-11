@@ -10,6 +10,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from database import get_all_staff, add_staff, update_staff, delete_staff
+from utils import treeview_sort_column
 
 
 class StaffManagement(ctk.CTkFrame):
@@ -71,24 +72,27 @@ class StaffManagement(ctk.CTkFrame):
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
         # Treeview
-        columns = ("ma_nd", "ma_nhan_vien", "ho_ten", "so_dt", "email", "dia_chi")
+        columns = ("ma_nhan_vien", "ho_ten", "so_dt", "email", "dia_chi")
         
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=12)
         
-        # Column headings
-        self.tree.heading("ma_nd", text="ID")
-        self.tree.heading("ma_nhan_vien", text="Mã NV")
-        self.tree.heading("ho_ten", text="Họ tên")
-        self.tree.heading("so_dt", text="Số điện thoại")
-        self.tree.heading("email", text="Email")
-        self.tree.heading("dia_chi", text="Địa chỉ")
+        # Column headings with sorting
+        headings = {
+            "ma_nhan_vien": "Mã NV",
+            "ho_ten": "Họ tên",
+            "so_dt": "Số điện thoại",
+            "email": "Email",
+            "dia_chi": "Địa chỉ"
+        }
+        for col, text in headings.items():
+            self.tree.heading(col, text=text, 
+                            command=lambda c=col: treeview_sort_column(self.tree, c, False))
         
         # Column widths
-        self.tree.column("ma_nd", width=50, anchor="center")
         self.tree.column("ma_nhan_vien", width=100, anchor="center")
-        self.tree.column("ho_ten", width=180)
-        self.tree.column("so_dt", width=120, anchor="center")
-        self.tree.column("email", width=200)
+        self.tree.column("ho_ten", width=200)
+        self.tree.column("so_dt", width=130, anchor="center")
+        self.tree.column("email", width=220)
         self.tree.column("dia_chi", width=200)
         
         # Scrollbar
@@ -100,7 +104,7 @@ class StaffManagement(ctk.CTkFrame):
         
         # Bind selection
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
-        self.tree.bind('<Double-1>', lambda e: self.show_edit_dialog())
+        self.tree.bind('<Double-1>', self.on_double_click)
         
         # Action buttons
         action_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -143,8 +147,7 @@ class StaffManagement(ctk.CTkFrame):
         staff_list = get_all_staff()
         
         for staff in staff_list:
-            self.tree.insert("", "end", values=(
-                staff['ma_nd'],
+            self.tree.insert("", "end", iid=staff['ma_nd'], values=(
                 staff['ma_nhan_vien'],
                 staff['ho_ten'],
                 staff['so_dt'] or "N/A",
@@ -162,8 +165,7 @@ class StaffManagement(ctk.CTkFrame):
         staff_list = get_all_staff(search_term)
         
         for staff in staff_list:
-            self.tree.insert("", "end", values=(
-                staff['ma_nd'],
+            self.tree.insert("", "end", iid=staff['ma_nd'], values=(
                 staff['ma_nhan_vien'],
                 staff['ho_ten'],
                 staff['so_dt'] or "N/A",
@@ -175,15 +177,18 @@ class StaffManagement(ctk.CTkFrame):
         """Xử lý khi chọn item"""
         selection = self.tree.selection()
         if selection:
-            item = self.tree.item(selection[0])
-            self.selected_staff = item['values'][0]  # ma_nd
+            self.selected_staff = int(selection[0])  # iid là ma_nd
             self.edit_btn.configure(state="normal")
             self.delete_btn.configure(state="normal")
         else:
             self.selected_staff = None
             self.edit_btn.configure(state="disabled")
-            self.delete_btn.configure(state="disabled")
-            
+            self.delete_btn.configure(state="disabled")    
+    def on_double_click(self, event):
+        """Xử lý double-click - chỉ mở dialog nếu click vào dòng dữ liệu"""
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            self.show_edit_dialog()            
     def show_add_dialog(self):
         """Hiện dialog thêm nhân viên"""
         dialog = StaffDialog(self, "Thêm nhân viên mới")
@@ -211,12 +216,12 @@ class StaffManagement(ctk.CTkFrame):
         values = item['values']
         
         staff_data = {
-            'ma_nd': values[0],
-            'ma_nhan_vien': values[1],
-            'ho_ten': values[2],
-            'so_dt': values[3] if values[3] != "N/A" else "",
-            'email': values[4] if values[4] != "N/A" else "",
-            'dia_chi': values[5] if values[5] != "N/A" else ""
+            'ma_nd': self.selected_staff,
+            'ma_nhan_vien': values[0],
+            'ho_ten': values[1],
+            'so_dt': values[2] if values[2] != "N/A" else "",
+            'email': values[3] if values[3] != "N/A" else "",
+            'dia_chi': values[4] if values[4] != "N/A" else ""
         }
         
         dialog = StaffDialog(self, "Sửa thông tin nhân viên", staff_data)

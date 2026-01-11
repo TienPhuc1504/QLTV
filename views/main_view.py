@@ -8,11 +8,15 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from database import change_password, get_book_statistics, get_borrow_statistics
+from database import get_book_statistics, get_borrow_statistics
 
 
 class MainView(ctk.CTkToplevel):
     """Giao diện chính sau khi đăng nhập"""
+    
+    # Màu cho menu button
+    ACTIVE_COLOR = "#1f538d"  # Màu khi active
+    INACTIVE_COLOR = "transparent"  # Màu khi không active
     
     def __init__(self, parent, user: dict):
         super().__init__(parent)
@@ -20,6 +24,8 @@ class MainView(ctk.CTkToplevel):
         self.parent = parent
         self.user = user
         self.current_frame = None
+        self.menu_buttons = []  # Danh sách các menu button
+        self.active_button = None  # Button đang active
         
         # Cấu hình cửa sổ
         self.title(f"Quản lý Thư viện - {user['ho_ten']} ({user['loai_nguoi_dung']})")
@@ -95,114 +101,169 @@ class MainView(ctk.CTkToplevel):
         self.dashboard_btn = ctk.CTkButton(
             menu_frame,
             text="📊  Tổng quan",
-            command=self.show_dashboard,
+            command=lambda: self.set_active_and_show(self.dashboard_btn, self.show_dashboard),
             height=40,
             anchor="w",
-            font=ctk.CTkFont(size=14)
+            font=ctk.CTkFont(size=14),
+            fg_color=self.INACTIVE_COLOR,
+            text_color=("gray10", "gray90"),
+            hover_color=("gray75", "gray35")
         )
         self.dashboard_btn.pack(fill="x", pady=2)
+        self.menu_buttons.append(self.dashboard_btn)
         
         # Quản lý sách (Nhân viên & Admin)
         if self.user['loai_nguoi_dung'] in ['ADMIN', 'NHAN_VIEN']:
             self.book_btn = ctk.CTkButton(
                 menu_frame,
                 text="📖  Quản lý Sách",
-                command=self.show_book_management,
+                command=lambda: self.set_active_and_show(self.book_btn, self.show_book_management),
                 height=40,
                 anchor="w",
                 font=ctk.CTkFont(size=14),
-                fg_color="transparent",
+                fg_color=self.INACTIVE_COLOR,
                 text_color=("gray10", "gray90"),
                 hover_color=("gray75", "gray35")
             )
             self.book_btn.pack(fill="x", pady=2)
+            self.menu_buttons.append(self.book_btn)
             
             # Quản lý đọc giả
             self.reader_btn = ctk.CTkButton(
                 menu_frame,
                 text="👥  Quản lý Đọc giả",
-                command=self.show_reader_management,
+                command=lambda: self.set_active_and_show(self.reader_btn, self.show_reader_management),
                 height=40,
                 anchor="w",
                 font=ctk.CTkFont(size=14),
-                fg_color="transparent",
+                fg_color=self.INACTIVE_COLOR,
                 text_color=("gray10", "gray90"),
                 hover_color=("gray75", "gray35")
             )
             self.reader_btn.pack(fill="x", pady=2)
+            self.menu_buttons.append(self.reader_btn)
             
             # Quản lý mượn/trả
             self.borrow_btn = ctk.CTkButton(
                 menu_frame,
                 text="📋  Mượn/Trả Sách",
-                command=self.show_borrow_management,
+                command=lambda: self.set_active_and_show(self.borrow_btn, self.show_borrow_management),
                 height=40,
                 anchor="w",
                 font=ctk.CTkFont(size=14),
-                fg_color="transparent",
+                fg_color=self.INACTIVE_COLOR,
                 text_color=("gray10", "gray90"),
                 hover_color=("gray75", "gray35")
             )
             self.borrow_btn.pack(fill="x", pady=2)
+            self.menu_buttons.append(self.borrow_btn)
+            
+            # Yêu cầu mượn sách (từ đọc giả)
+            self.requests_btn = ctk.CTkButton(
+                menu_frame,
+                text="📝  Yêu cầu mượn sách",
+                command=lambda: self.set_active_and_show(self.requests_btn, self.show_borrow_requests),
+                height=40,
+                anchor="w",
+                font=ctk.CTkFont(size=14),
+                fg_color=self.INACTIVE_COLOR,
+                text_color=("gray10", "gray90"),
+                hover_color=("gray75", "gray35")
+            )
+            self.requests_btn.pack(fill="x", pady=2)
+            self.menu_buttons.append(self.requests_btn)
         
         # Quản lý nhân viên (chỉ Admin)
         if self.user['loai_nguoi_dung'] == 'ADMIN':
             self.staff_btn = ctk.CTkButton(
                 menu_frame,
                 text="👔  Quản lý Nhân viên",
-                command=self.show_staff_management,
+                command=lambda: self.set_active_and_show(self.staff_btn, self.show_staff_management),
                 height=40,
                 anchor="w",
                 font=ctk.CTkFont(size=14),
-                fg_color="transparent",
+                fg_color=self.INACTIVE_COLOR,
                 text_color=("gray10", "gray90"),
                 hover_color=("gray75", "gray35")
             )
             self.staff_btn.pack(fill="x", pady=2)
+            self.menu_buttons.append(self.staff_btn)
         
-        # Đọc giả - Xem thông tin cá nhân và lịch sử mượn
+        # Đọc giả - Menu tìm và mượn sách
         if self.user['loai_nguoi_dung'] == 'DOC_GIA':
-            self.my_books_btn = ctk.CTkButton(
+            self.search_books_btn = ctk.CTkButton(
                 menu_frame,
-                text="📚  Sách của tôi",
-                command=self.show_my_books,
+                text="🔍  Tìm & Mượn sách",
+                command=lambda: self.set_active_and_show(self.search_books_btn, self.show_search_books),
                 height=40,
                 anchor="w",
                 font=ctk.CTkFont(size=14),
-                fg_color="transparent",
+                fg_color=self.INACTIVE_COLOR,
                 text_color=("gray10", "gray90"),
                 hover_color=("gray75", "gray35")
             )
-            self.my_books_btn.pack(fill="x", pady=2)
+            self.search_books_btn.pack(fill="x", pady=2)
+            self.menu_buttons.append(self.search_books_btn)
+            
+            self.my_borrows_btn = ctk.CTkButton(
+                menu_frame,
+                text="📚  Sách đã mượn",
+                command=lambda: self.set_active_and_show(self.my_borrows_btn, self.show_my_borrows),
+                height=40,
+                anchor="w",
+                font=ctk.CTkFont(size=14),
+                fg_color=self.INACTIVE_COLOR,
+                text_color=("gray10", "gray90"),
+                hover_color=("gray75", "gray35")
+            )
+            self.my_borrows_btn.pack(fill="x", pady=2)
+            self.menu_buttons.append(self.my_borrows_btn)
+            
+            # Yêu cầu của tôi
+            self.my_requests_btn = ctk.CTkButton(
+                menu_frame,
+                text="📝  Yêu cầu của tôi",
+                command=lambda: self.set_active_and_show(self.my_requests_btn, self.show_my_requests),
+                height=40,
+                anchor="w",
+                font=ctk.CTkFont(size=14),
+                fg_color=self.INACTIVE_COLOR,
+                text_color=("gray10", "gray90"),
+                hover_color=("gray75", "gray35")
+            )
+            self.my_requests_btn.pack(fill="x", pady=2)
+            self.menu_buttons.append(self.my_requests_btn)
         
         # Thống kê
         if self.user['loai_nguoi_dung'] in ['ADMIN', 'NHAN_VIEN']:
             self.stats_btn = ctk.CTkButton(
                 menu_frame,
                 text="📈  Thống kê",
-                command=self.show_statistics,
+                command=lambda: self.set_active_and_show(self.stats_btn, self.show_statistics),
                 height=40,
                 anchor="w",
                 font=ctk.CTkFont(size=14),
-                fg_color="transparent",
+                fg_color=self.INACTIVE_COLOR,
                 text_color=("gray10", "gray90"),
                 hover_color=("gray75", "gray35")
             )
             self.stats_btn.pack(fill="x", pady=2)
+            self.menu_buttons.append(self.stats_btn)
         
-        # Đổi mật khẩu
-        self.password_btn = ctk.CTkButton(
+        # Thông tin tài khoản
+        self.account_btn = ctk.CTkButton(
             menu_frame,
-            text="🔐  Đổi mật khẩu",
-            command=self.show_change_password,
+            text="👤  Thông tin tài khoản",
+            command=lambda: self.set_active_and_show(self.account_btn, self.show_account),
             height=40,
             anchor="w",
             font=ctk.CTkFont(size=14),
-            fg_color="transparent",
+            fg_color=self.INACTIVE_COLOR,
             text_color=("gray10", "gray90"),
             hover_color=("gray75", "gray35")
         )
-        self.password_btn.pack(fill="x", pady=2)
+        self.account_btn.pack(fill="x", pady=2)
+        self.menu_buttons.append(self.account_btn)
         
         # Logout button
         logout_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
@@ -236,9 +297,26 @@ class MainView(ctk.CTkToplevel):
         """Xóa nội dung hiện tại"""
         if self.current_frame:
             self.current_frame.destroy()
+    
+    def set_active_button(self, button):
+        """Set button là active và reset các button khác"""
+        # Reset tất cả button về trạng thái inactive
+        for btn in self.menu_buttons:
+            btn.configure(fg_color=self.INACTIVE_COLOR, text_color=("gray10", "gray90"))
+        
+        # Set button được chọn là active
+        if button:
+            button.configure(fg_color=self.ACTIVE_COLOR, text_color="white")
+            self.active_button = button
+    
+    def set_active_and_show(self, button, show_func):
+        """Set active button và gọi hàm hiển thị"""
+        self.set_active_button(button)
+        show_func()
             
     def show_dashboard(self):
         """Hiển thị tổng quan"""
+        self.set_active_button(self.dashboard_btn)
         self.clear_content()
         
         self.current_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
@@ -338,12 +416,48 @@ class MainView(ctk.CTkToplevel):
         self.current_frame = StaffManagement(self.content_frame, self.user)
         self.current_frame.pack(fill="both", expand=True)
         
-    def show_my_books(self):
-        """Hiển thị sách của đọc giả"""
+    def show_search_books(self):
+        """Hiển thị tìm và mượn sách"""
         self.clear_content()
         try:
-            from views.my_books import MyBooks
-            self.current_frame = MyBooks(self.content_frame, self.user)
+            from views.search_books import SearchBooks
+            self.current_frame = SearchBooks(self.content_frame, self.user)
+            self.current_frame.pack(fill="both", expand=True)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Lỗi", f"Không thể tải trang: {str(e)}")
+    
+    def show_my_borrows(self):
+        """Hiển thị sách đã mượn"""
+        self.clear_content()
+        try:
+            from views.my_borrows import MyBorrows
+            self.current_frame = MyBorrows(self.content_frame, self.user)
+            self.current_frame.pack(fill="both", expand=True)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Lỗi", f"Không thể tải trang: {str(e)}")
+    
+    def show_my_requests(self):
+        """Hiển thị yêu cầu mượn của đọc giả"""
+        self.clear_content()
+        try:
+            from views.my_requests import MyRequests
+            self.current_frame = MyRequests(self.content_frame, self.user)
+            self.current_frame.pack(fill="both", expand=True)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Lỗi", f"Không thể tải trang: {str(e)}")
+    
+    def show_borrow_requests(self):
+        """Hiển thị quản lý yêu cầu mượn (nhân viên/admin)"""
+        self.clear_content()
+        try:
+            from views.borrow_requests import BorrowRequestsView
+            self.current_frame = BorrowRequestsView(self.content_frame, self.user)
             self.current_frame.pack(fill="both", expand=True)
         except Exception as e:
             import traceback
@@ -357,71 +471,12 @@ class MainView(ctk.CTkToplevel):
         self.current_frame = StatisticsView(self.content_frame, self.user)
         self.current_frame.pack(fill="both", expand=True)
         
-    def show_change_password(self):
-        """Hiển thị đổi mật khẩu"""
+    def show_account(self):
+        """Hiển thị thông tin tài khoản"""
         self.clear_content()
-        
-        self.current_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
-        self.current_frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        title = ctk.CTkLabel(
-            self.current_frame,
-            text="🔐 Đổi mật khẩu",
-            font=ctk.CTkFont(size=24, weight="bold")
-        )
-        title.pack(anchor="w", pady=(0, 30))
-        
-        # Form frame
-        form_frame = ctk.CTkFrame(self.current_frame, width=400)
-        form_frame.pack(anchor="w")
-        
-        # Current password
-        ctk.CTkLabel(form_frame, text="Mật khẩu hiện tại:", font=ctk.CTkFont(size=14)).pack(anchor="w", padx=20, pady=(20, 5))
-        current_pw = ctk.CTkEntry(form_frame, show="•", width=300)
-        current_pw.pack(padx=20)
-        
-        # New password
-        ctk.CTkLabel(form_frame, text="Mật khẩu mới:", font=ctk.CTkFont(size=14)).pack(anchor="w", padx=20, pady=(15, 5))
-        new_pw = ctk.CTkEntry(form_frame, show="•", width=300)
-        new_pw.pack(padx=20)
-        
-        # Confirm password
-        ctk.CTkLabel(form_frame, text="Xác nhận mật khẩu:", font=ctk.CTkFont(size=14)).pack(anchor="w", padx=20, pady=(15, 5))
-        confirm_pw = ctk.CTkEntry(form_frame, show="•", width=300)
-        confirm_pw.pack(padx=20)
-        
-        def do_change_password():
-            old = current_pw.get()
-            new = new_pw.get()
-            confirm = confirm_pw.get()
-            
-            if not all([old, new, confirm]):
-                messagebox.showwarning("Cảnh báo", "Vui lòng điền đầy đủ thông tin!")
-                return
-                
-            if new != confirm:
-                messagebox.showwarning("Cảnh báo", "Mật khẩu xác nhận không khớp!")
-                return
-                
-            if len(new) < 4:
-                messagebox.showwarning("Cảnh báo", "Mật khẩu mới phải có ít nhất 4 ký tự!")
-                return
-                
-            if change_password(self.user['ma_nd'], old, new):
-                messagebox.showinfo("Thành công", "Đổi mật khẩu thành công!")
-                current_pw.delete(0, 'end')
-                new_pw.delete(0, 'end')
-                confirm_pw.delete(0, 'end')
-            else:
-                messagebox.showerror("Lỗi", "Mật khẩu hiện tại không đúng!")
-        
-        # Button
-        ctk.CTkButton(
-            form_frame,
-            text="Đổi mật khẩu",
-            command=do_change_password,
-            width=300
-        ).pack(padx=20, pady=20)
+        from views.account_view import AccountView
+        self.current_frame = AccountView(self.content_frame, self.user)
+        self.current_frame.pack(fill="both", expand=True)
         
     def logout(self):
         """Đăng xuất"""

@@ -1,0 +1,256 @@
+"""
+My Borrows - Quản lý sách đã mượn và lịch sử (dành cho đọc giả)
+"""
+import customtkinter as ctk
+from tkinter import messagebox, ttk
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from database import get_reader_borrow_history
+from utils import treeview_sort_column
+
+
+class MyBorrows(ctk.CTkFrame):
+    """Giao diện quản lý sách đã mượn cho đọc giả"""
+    
+    def __init__(self, parent, user: dict):
+        super().__init__(parent, fg_color="transparent")
+        
+        self.user = user
+        self.borrowing_urls = {}
+        
+        self.create_widgets()
+        self.load_data()
+        
+    def create_widgets(self):
+        """Tạo các widget"""
+        # Header
+        header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        header_frame.pack(fill="x", padx=20, pady=(20, 10))
+        
+        title = ctk.CTkLabel(
+            header_frame,
+            text="📚 Sách đã mượn",
+            font=ctk.CTkFont(size=24, weight="bold")
+        )
+        title.pack(side="left")
+        
+        # Tabs
+        self.tabview = ctk.CTkTabview(self)
+        self.tabview.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        # Tab 1: Sách đang mượn
+        tab1 = self.tabview.add("📖 Đang mượn")
+        self.create_borrowing_tab(tab1)
+        
+        # Tab 2: Lịch sử mượn
+        tab2 = self.tabview.add("📜 Lịch sử")
+        self.create_history_tab(tab2)
+        
+    def create_borrowing_tab(self, parent):
+        """Tạo tab sách đang mượn"""
+        # Tree frame
+        tree_frame = ctk.CTkFrame(parent)
+        tree_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        columns = ("ma_phieu", "tieu_de", "tac_gia", "ngay_muon", "ngay_hen_tra", "loai_sach", "trang_thai")
+        self.borrowing_tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=12)
+        
+        # Headings with sorting
+        borrowing_headings = {
+            "ma_phieu": "Mã phiếu",
+            "tieu_de": "Tên sách",
+            "tac_gia": "Tác giả",
+            "ngay_muon": "Ngày mượn",
+            "ngay_hen_tra": "Hạn trả",
+            "loai_sach": "Loại sách",
+            "trang_thai": "Trạng thái"
+        }
+        for col, text in borrowing_headings.items():
+            self.borrowing_tree.heading(col, text=text, 
+                            command=lambda t=self.borrowing_tree, c=col: treeview_sort_column(t, c, False))
+        
+        self.borrowing_tree.column("ma_phieu", width=70, anchor="center")
+        self.borrowing_tree.column("tieu_de", width=200)
+        self.borrowing_tree.column("tac_gia", width=130)
+        self.borrowing_tree.column("ngay_muon", width=100, anchor="center")
+        self.borrowing_tree.column("ngay_hen_tra", width=100, anchor="center")
+        self.borrowing_tree.column("loai_sach", width=90, anchor="center")
+        self.borrowing_tree.column("trang_thai", width=100, anchor="center")
+        
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.borrowing_tree.yview)
+        self.borrowing_tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.borrowing_tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Bind selection event
+        self.borrowing_tree.bind('<<TreeviewSelect>>', self.on_borrowing_select)
+        
+        # Action frame
+        action_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        action_frame.pack(fill="x", padx=10, pady=10)
+        
+        self.read_online_btn = ctk.CTkButton(
+            action_frame,
+            text="🌐 Đọc Online",
+            command=self.open_online_book,
+            width=120,
+            fg_color="#6f42c1",
+            hover_color="#5a32a3",
+            state="disabled"
+        )
+        self.read_online_btn.pack(side="left", padx=5)
+        
+        ctk.CTkButton(
+            action_frame,
+            text="🔄 Làm mới",
+            command=self.load_data,
+            width=100
+        ).pack(side="left", padx=5)
+        
+        # Note
+        note = ctk.CTkLabel(
+            action_frame,
+            text="💡 Sách online có thể đọc trực tiếp qua link. Để trả sách, vui lòng liên hệ nhân viên thư viện.",
+            text_color="gray"
+        )
+        note.pack(side="right", padx=10)
+        
+    def create_history_tab(self, parent):
+        """Tạo tab lịch sử mượn"""
+        frame = ctk.CTkFrame(parent)
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        columns = ("ma_phieu", "tieu_de", "ngay_muon", "ngay_hen_tra", "ngay_tra", "tien_phat")
+        self.history_tree = ttk.Treeview(frame, columns=columns, show="headings", height=12)
+        
+        # Headings with sorting
+        history_headings = {
+            "ma_phieu": "Mã phiếu",
+            "tieu_de": "Tên sách",
+            "ngay_muon": "Ngày mượn",
+            "ngay_hen_tra": "Hạn trả",
+            "ngay_tra": "Ngày trả",
+            "tien_phat": "Tiền phạt"
+        }
+        for col, text in history_headings.items():
+            self.history_tree.heading(col, text=text, 
+                            command=lambda t=self.history_tree, c=col: treeview_sort_column(t, c, False))
+        
+        self.history_tree.column("ma_phieu", width=80, anchor="center")
+        self.history_tree.column("tieu_de", width=250)
+        self.history_tree.column("ngay_muon", width=100, anchor="center")
+        self.history_tree.column("ngay_hen_tra", width=100, anchor="center")
+        self.history_tree.column("ngay_tra", width=100, anchor="center")
+        self.history_tree.column("tien_phat", width=100, anchor="e")
+        
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.history_tree.yview)
+        self.history_tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.history_tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+    def load_data(self):
+        """Tải dữ liệu"""
+        try:
+            self.load_borrowing()
+            self.load_history()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Error loading data: {e}")
+        
+    def load_borrowing(self):
+        """Tải sách đang mượn"""
+        for item in self.borrowing_tree.get_children():
+            self.borrowing_tree.delete(item)
+            
+        history = get_reader_borrow_history(self.user['ma_nd'])
+        
+        # Lưu thông tin URL sách online
+        self.borrowing_urls = {}
+        
+        for item in history:
+            if item['trang_thai_phieu'] == 'DANG_MUON':
+                from datetime import datetime
+                ngay_hen_tra = datetime.strptime(item['ngay_hen_tra'], '%Y-%m-%d')
+                if datetime.now() > ngay_hen_tra:
+                    trang_thai = '⚠️ Quá hạn'
+                else:
+                    trang_thai = '📖 Đang mượn'
+                
+                # Xác định loại sách
+                loai_sach = '🌐 Online' if item.get('loai_sach') == 'SACH_ONLINE' else '📚 Giấy'
+                
+                # Lưu URL nếu là sách online
+                if item.get('url_tai_lieu'):
+                    self.borrowing_urls[item['ma_phieu']] = item['url_tai_lieu']
+                    
+                self.borrowing_tree.insert("", "end", values=(
+                    item['ma_phieu'],
+                    item['tieu_de'],
+                    item['tac_gia'] or 'N/A',
+                    item['ngay_muon'],
+                    item['ngay_hen_tra'],
+                    loai_sach,
+                    trang_thai
+                ))
+                
+    def load_history(self):
+        """Tải lịch sử mượn"""
+        for item in self.history_tree.get_children():
+            self.history_tree.delete(item)
+            
+        history = get_reader_borrow_history(self.user['ma_nd'])
+        
+        for item in history:
+            if item['trang_thai_phieu'] == 'DA_TRA':
+                self.history_tree.insert("", "end", values=(
+                    item['ma_phieu'],
+                    item['tieu_de'],
+                    item['ngay_muon'],
+                    item['ngay_hen_tra'],
+                    item['ngay_tra_thuc'] or 'N/A',
+                    f"{item['tien_phat']:,.0f}đ" if item['tien_phat'] else "0đ"
+                ))
+                
+    def on_borrowing_select(self, event):
+        """Xử lý khi chọn sách đang mượn"""
+        selection = self.borrowing_tree.selection()
+        if selection:
+            # Kiểm tra xem có phải sách online không
+            item = self.borrowing_tree.item(selection[0])
+            ma_phieu = item['values'][0]
+            loai_sach = item['values'][5]  # Cột loại sách
+            
+            # Bật nút "Đọc Online" nếu là sách online và có URL
+            if "Online" in str(loai_sach) and ma_phieu in self.borrowing_urls:
+                self.read_online_btn.configure(state="normal")
+            else:
+                self.read_online_btn.configure(state="disabled")
+        else:
+            self.read_online_btn.configure(state="disabled")
+            
+    def open_online_book(self):
+        """Mở link sách online"""
+        selection = self.borrowing_tree.selection()
+        if not selection:
+            messagebox.showwarning("Cảnh báo", "Vui lòng chọn sách online!")
+            return
+            
+        item = self.borrowing_tree.item(selection[0])
+        ma_phieu = item['values'][0]
+        tieu_de = item['values'][1]
+        
+        # Lấy URL từ dictionary đã lưu
+        url = self.borrowing_urls.get(ma_phieu)
+        
+        if url:
+            import webbrowser
+            webbrowser.open(url)
+            messagebox.showinfo("Đọc sách online", f"Đang mở sách:\n📖 {tieu_de}\n\n🔗 {url}")
+        else:
+            messagebox.showwarning("Thông báo", "Không tìm thấy link sách online!")
