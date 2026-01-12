@@ -8,7 +8,8 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from database import get_book_statistics, get_borrow_statistics
+from database import get_book_statistics, get_borrow_statistics, get_unread_notification_count, check_and_notify_due_books, get_notifications, delete_notification, delete_all_notifications
+from utils import center_window as center_window_util
 
 
 class MainView(ctk.CTkToplevel):
@@ -18,6 +19,9 @@ class MainView(ctk.CTkToplevel):
     ACTIVE_COLOR = "#1f538d"  # Màu khi active
     INACTIVE_COLOR = "transparent"  # Màu khi không active
     
+    # Session timeout (30 phút = 1800000 ms)
+    SESSION_TIMEOUT = 30 * 60 * 1000
+    
     def __init__(self, parent, user: dict):
         super().__init__(parent)
         
@@ -26,6 +30,7 @@ class MainView(ctk.CTkToplevel):
         self.current_frame = None
         self.menu_buttons = []  # Danh sách các menu button
         self.active_button = None  # Button đang active
+        self.session_timer_id = None  # ID của session timer
         
         # Cấu hình cửa sổ
         self.title(f"Quản lý Thư viện - {user['ho_ten']} ({user['loai_nguoi_dung']})")
@@ -41,17 +46,26 @@ class MainView(ctk.CTkToplevel):
         # Tạo giao diện
         self.create_widgets()
         
+        # Cập nhật badge thông báo
+        self.update_notification_badge()
+        
+        # Bắt đầu kiểm tra thông báo định kỳ
+        self.start_notification_checker()
+        
+        # Bắt đầu session timeout
+        self.start_session_timer()
+        
+        # Bind các sự kiện để reset session timer
+        self.bind_all("<Button>", self.reset_session_timer)
+        self.bind_all("<Key>", self.reset_session_timer)
+        self.bind_all("<Motion>", self.reset_session_timer)
+        
         # Hiển thị dashboard mặc định
         self.show_dashboard()
         
     def center_window(self):
         """Căn giữa cửa sổ"""
-        self.update_idletasks()
-        width = 1200
-        height = 700
-        x = (self.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.winfo_screenheight() // 2) - (height // 2)
-        self.geometry(f'{width}x{height}+{x}+{y}')
+        center_window_util(self, 1200, 700)
         
     def create_widgets(self):
         """Tạo giao diện chính"""
@@ -355,24 +369,129 @@ class MainView(ctk.CTkToplevel):
         self.create_stat_card(cards_frame, "💰", "Tiền phạt", 
                              f"{borrow_stats.get('total_fines', 0):,.0f}đ", "#f39c12")
         
-        # Welcome message
-        welcome_frame = ctk.CTkFrame(self.current_frame)
-        welcome_frame.pack(fill="x", pady=20)
+        # Main content area with 2 columns
+        main_content = ctk.CTkFrame(self.current_frame, fg_color="transparent")
+        main_content.pack(fill="both", expand=True, pady=10)
+        main_content.grid_columnconfigure(0, weight=1)
+        main_content.grid_columnconfigure(1, weight=1)
+        main_content.grid_rowconfigure(0, weight=1)
+        
+        # Left column - Welcome & Quick actions
+        left_frame = ctk.CTkFrame(main_content)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=5)
         
         welcome_text = ctk.CTkLabel(
-            welcome_frame,
+            left_frame,
             text=f"Xin chào, {self.user['ho_ten']}! 👋",
-            font=ctk.CTkFont(size=18)
+            font=ctk.CTkFont(size=18, weight="bold")
         )
-        welcome_text.pack(pady=20)
+        welcome_text.pack(pady=(20, 10))
+        
+        role_display = {
+            'ADMIN': 'Quản trị viên',
+            'NHAN_VIEN': 'Nhân viên',
+            'DOC_GIA': 'Độc giả'
+        }
         
         guide_text = ctk.CTkLabel(
-            welcome_frame,
-            text="Sử dụng menu bên trái để điều hướng đến các chức năng của hệ thống.",
+            left_frame,
+            text=f"Vai trò: {role_display.get(self.user['loai_nguoi_dung'], '')}",
             font=ctk.CTkFont(size=14),
             text_color="gray"
         )
         guide_text.pack(pady=(0, 20))
+        
+        # Quick actions based on role
+        ctk.CTkLabel(
+            left_frame,
+            text="⚡ Thao tác nhanh",
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(anchor="w", padx=20, pady=(10, 5))
+        
+        quick_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
+        quick_frame.pack(fill="x", padx=20, pady=10)
+        
+        if self.user['loai_nguoi_dung'] in ['ADMIN', 'NHAN_VIEN']:
+            ctk.CTkButton(
+                quick_frame,
+                text="📝 Xử lý yêu cầu mượn",
+                command=lambda: self.set_active_and_show(self.requests_btn, self.show_borrow_requests),
+                width=200
+            ).pack(pady=5)
+            
+            ctk.CTkButton(
+                quick_frame,
+                text="📖 Quản lý sách",
+                command=lambda: self.set_active_and_show(self.book_btn, self.show_book_management),
+                width=200
+            ).pack(pady=5)
+        else:
+            ctk.CTkButton(
+                quick_frame,
+                text="🔍 Tìm & Mượn sách",
+                command=lambda: self.set_active_and_show(self.search_books_btn, self.show_search_books),
+                width=200
+            ).pack(pady=5)
+            
+            ctk.CTkButton(
+                quick_frame,
+                text="📚 Sách đã mượn",
+                command=lambda: self.set_active_and_show(self.my_borrows_btn, self.show_my_borrows),
+                width=200
+            ).pack(pady=5)
+        
+        # Right column - Notifications
+        right_frame = ctk.CTkFrame(main_content)
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=5)
+        
+        # Notification header
+        notif_header = ctk.CTkFrame(right_frame, fg_color="transparent")
+        notif_header.pack(fill="x", padx=15, pady=(15, 5))
+        
+        unread_count = get_unread_notification_count(self.user['ma_nd'])
+        notif_title = f"🔔 Thông báo ({unread_count} chưa đọc)" if unread_count > 0 else "🔔 Thông báo"
+        
+        ctk.CTkLabel(
+            notif_header,
+            text=notif_title,
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).pack(side="left")
+        
+        ctk.CTkButton(
+            notif_header,
+            text="🔄",
+            command=self.show_dashboard,
+            width=35,
+            height=28,
+            fg_color="#17a2b8",
+            hover_color="#138496"
+        ).pack(side="right", padx=(5, 0))
+        
+        ctk.CTkButton(
+            notif_header,
+            text="🗑️ Xóa tất cả",
+            command=self.delete_all_notifications_action,
+            width=100,
+            height=28,
+            fg_color="#dc3545",
+            hover_color="#c82333"
+        ).pack(side="right")
+        
+        # Notification list
+        notif_scroll = ctk.CTkScrollableFrame(right_frame, fg_color="transparent")
+        notif_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        notifications = get_notifications(self.user['ma_nd'], limit=20)
+        
+        if not notifications:
+            ctk.CTkLabel(
+                notif_scroll,
+                text="📭 Không có thông báo nào",
+                text_color="gray"
+            ).pack(pady=30)
+        else:
+            # Group notifications by type
+            self.render_notifications_grouped(notif_scroll, notifications)
         
     def create_stat_card(self, parent, icon: str, title: str, value: str, color: str):
         """Tạo thẻ thống kê"""
@@ -387,6 +506,261 @@ class MainView(ctk.CTkToplevel):
         
         title_label = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=12), text_color="white")
         title_label.pack(pady=(0, 15))
+    
+    def render_notifications_grouped(self, parent, notifications):
+        """Render thông báo được chia theo nhóm"""
+        from datetime import datetime
+        
+        # Nhóm thông báo theo loại
+        groups = {
+            'staff': {
+                'title': '📝 Yêu cầu cần xử lý',
+                'types': ['YEU_CAU_MOI'],
+                'color': '#17a2b8',
+                'items': []
+            },
+            'approved': {
+                'title': '✅ Yêu cầu đã duyệt',
+                'types': ['YEU_CAU_DUYET', 'CHO_LAY_SACH'],
+                'color': '#28a745',
+                'items': []
+            },
+            'rejected': {
+                'title': '❌ Yêu cầu từ chối',
+                'types': ['YEU_CAU_TU_CHOI'],
+                'color': '#dc3545',
+                'items': []
+            },
+            'due': {
+                'title': '⏰ Nhắc nhở hạn trả',
+                'types': ['SAP_HET_HAN', 'QUA_HAN'],
+                'color': '#ffc107',
+                'items': []
+            },
+            'other': {
+                'title': '🔔 Thông báo khác',
+                'types': ['SACH_CO_SAN', 'HE_THONG'],
+                'color': '#6c757d',
+                'items': []
+            }
+        }
+        
+        # Phân loại thông báo
+        for notif in notifications:
+            for group_key, group in groups.items():
+                if notif['loai_thong_bao'] in group['types']:
+                    group['items'].append(notif)
+                    break
+        
+        # Render từng nhóm
+        for group_key, group in groups.items():
+            if not group['items']:
+                continue
+                
+            # Group header
+            group_frame = ctk.CTkFrame(parent, fg_color=group['color'], corner_radius=8)
+            group_frame.pack(fill="x", pady=5)
+            
+            header = ctk.CTkFrame(group_frame, fg_color="transparent")
+            header.pack(fill="x", padx=10, pady=5)
+            
+            ctk.CTkLabel(
+                header,
+                text=f"{group['title']} ({len(group['items'])})",
+                font=ctk.CTkFont(size=13, weight="bold"),
+                text_color="white"
+            ).pack(side="left")
+            
+            # Items container
+            items_frame = ctk.CTkFrame(group_frame, fg_color=("gray90", "gray20"), corner_radius=5)
+            items_frame.pack(fill="x", padx=5, pady=(0, 5))
+            
+            for notif in group['items'][:5]:  # Limit 5 per group
+                self.create_notification_item(items_frame, notif)
+                
+            if len(group['items']) > 5:
+                ctk.CTkLabel(
+                    items_frame,
+                    text=f"... và {len(group['items']) - 5} thông báo khác",
+                    text_color="gray",
+                    font=ctk.CTkFont(size=11)
+                ).pack(pady=5)
+    
+    def create_notification_item(self, parent, notif):
+        """Tạo item thông báo"""
+        from datetime import datetime
+        
+        bg_color = ("gray85", "gray25") if notif['da_doc'] else ("gray80", "gray30")
+        
+        item = ctk.CTkFrame(parent, fg_color=bg_color, corner_radius=5)
+        item.pack(fill="x", padx=5, pady=2)
+        
+        content = ctk.CTkFrame(item, fg_color="transparent")
+        content.pack(fill="x", padx=10, pady=8)
+        
+        # Title row
+        title_row = ctk.CTkFrame(content, fg_color="transparent")
+        title_row.pack(fill="x")
+        
+        # Unread indicator
+        if not notif['da_doc']:
+            ctk.CTkLabel(
+                title_row,
+                text="●",
+                text_color="#28a745",
+                font=ctk.CTkFont(size=10)
+            ).pack(side="left", padx=(0, 5))
+        
+        ctk.CTkLabel(
+            title_row,
+            text=notif['tieu_de'],
+            font=ctk.CTkFont(size=12, weight="bold" if not notif['da_doc'] else "normal"),
+            anchor="w"
+        ).pack(side="left", fill="x", expand=True)
+        
+        # Time
+        try:
+            ngay_tao = datetime.strptime(notif['ngay_tao'], '%Y-%m-%d %H:%M:%S')
+            time_ago = self.get_time_ago(ngay_tao)
+        except:
+            time_ago = ""
+            
+        ctk.CTkLabel(
+            title_row,
+            text=time_ago,
+            text_color="gray",
+            font=ctk.CTkFont(size=10)
+        ).pack(side="right")
+        
+        # Content
+        ctk.CTkLabel(
+            content,
+            text=notif['noi_dung'][:100] + "..." if len(notif['noi_dung']) > 100 else notif['noi_dung'],
+            font=ctk.CTkFont(size=11),
+            text_color="gray",
+            anchor="w",
+            justify="left",
+            wraplength=350
+        ).pack(fill="x", pady=(3, 0))
+        
+        # Action buttons
+        btn_row = ctk.CTkFrame(content, fg_color="transparent")
+        btn_row.pack(fill="x", pady=(5, 0))
+        
+        # Delete notification button
+        ctk.CTkButton(
+            btn_row,
+            text="🗑️ Xóa",
+            command=lambda n=notif: self.mark_notification_read(n['ma_thong_bao']),
+            width=60,
+            height=24,
+            font=ctk.CTkFont(size=10),
+            fg_color="#dc3545",
+            hover_color="#c82333"
+        ).pack(side="left", padx=(0, 5))
+        
+        # Navigation button based on notification type
+        nav_info = self.get_notification_navigation(notif)
+        if nav_info:
+            ctk.CTkButton(
+                btn_row,
+                text=nav_info['text'],
+                command=nav_info['command'],
+                width=100,
+                height=24,
+                font=ctk.CTkFont(size=10),
+                fg_color="#007bff",
+                hover_color="#0056b3"
+            ).pack(side="left")
+    
+    def get_notification_navigation(self, notif):
+        """Lấy thông tin chuyển hướng dựa trên loại thông báo"""
+        notif_type = notif['loai_thong_bao']
+        
+        if notif_type == 'YEU_CAU_MOI':
+            # Nhân viên - chuyển đến xử lý yêu cầu
+            if self.user['loai_nguoi_dung'] in ['ADMIN', 'NHAN_VIEN']:
+                return {
+                    'text': '📝 Xử lý',
+                    'command': lambda: self.navigate_to_requests(notif)
+                }
+        
+        elif notif_type in ['YEU_CAU_DUYET', 'CHO_LAY_SACH']:
+            # Đọc giả - xem yêu cầu của tôi
+            if self.user['loai_nguoi_dung'] == 'DOC_GIA':
+                return {
+                    'text': '📋 Xem yêu cầu',
+                    'command': lambda: self.navigate_to_my_requests(notif)
+                }
+        
+        elif notif_type == 'YEU_CAU_TU_CHOI':
+            if self.user['loai_nguoi_dung'] == 'DOC_GIA':
+                return {
+                    'text': '📋 Xem chi tiết',
+                    'command': lambda: self.navigate_to_my_requests(notif)
+                }
+        
+        elif notif_type in ['SAP_HET_HAN', 'QUA_HAN']:
+            if self.user['loai_nguoi_dung'] == 'DOC_GIA':
+                return {
+                    'text': '📚 Xem sách mượn',
+                    'command': lambda: self.navigate_to_my_borrows(notif)
+                }
+        
+        return None
+    
+    def navigate_to_requests(self, notif):
+        """Chuyển đến trang yêu cầu mượn (nhân viên)"""
+        delete_notification(notif['ma_thong_bao'])
+        self.update_notification_badge()
+        self.set_active_and_show(self.requests_btn, self.show_borrow_requests)
+    
+    def navigate_to_my_requests(self, notif):
+        """Chuyển đến trang yêu cầu của tôi (đọc giả)"""
+        delete_notification(notif['ma_thong_bao'])
+        self.update_notification_badge()
+        self.set_active_and_show(self.my_requests_btn, self.show_my_requests)
+    
+    def navigate_to_my_borrows(self, notif):
+        """Chuyển đến trang sách đã mượn (đọc giả)"""
+        delete_notification(notif['ma_thong_bao'])
+        self.update_notification_badge()
+        self.set_active_and_show(self.my_borrows_btn, self.show_my_borrows)
+    
+    def mark_notification_read(self, ma_thong_bao):
+        """Đánh dấu thông báo đã đọc (xóa thông báo) và refresh"""
+        delete_notification(ma_thong_bao)
+        self.show_dashboard()
+        self.update_notification_badge()
+    
+    def delete_all_notifications_action(self):
+        """Xóa tất cả thông báo"""
+        if messagebox.askyesno("Xác nhận", "Bạn có chắc muốn xóa tất cả thông báo?"):
+            delete_all_notifications(self.user['ma_nd'])
+            self.show_dashboard()
+            self.update_notification_badge()
+    
+    def get_time_ago(self, dt):
+        """Chuyển datetime thành chuỗi 'X phút/giờ/ngày trước'"""
+        from datetime import datetime
+        now = datetime.now()
+        diff = now - dt
+        
+        seconds = diff.total_seconds()
+        
+        if seconds < 60:
+            return "Vừa xong"
+        elif seconds < 3600:
+            minutes = int(seconds / 60)
+            return f"{minutes} phút trước"
+        elif seconds < 86400:
+            hours = int(seconds / 3600)
+            return f"{hours} giờ trước"
+        elif seconds < 604800:
+            days = int(seconds / 86400)
+            return f"{days} ngày trước"
+        else:
+            return dt.strftime("%d/%m/%Y")
         
     def show_book_management(self):
         """Hiển thị quản lý sách"""
@@ -477,15 +851,70 @@ class MainView(ctk.CTkToplevel):
         from views.account_view import AccountView
         self.current_frame = AccountView(self.content_frame, self.user)
         self.current_frame.pack(fill="both", expand=True)
+    
+    def update_notification_badge(self):
+        """Cập nhật title Dashboard với số thông báo chưa đọc"""
+        try:
+            count = get_unread_notification_count(self.user['ma_nd'])
+            
+            if count > 0:
+                self.dashboard_btn.configure(text=f"📊  Tổng quan ({count})")
+            else:
+                self.dashboard_btn.configure(text="📊  Tổng quan")
+        except Exception:
+            pass
+    
+    def start_notification_checker(self):
+        """Bắt đầu kiểm tra thông báo định kỳ"""
+        def check():
+            try:
+                # Kiểm tra sách sắp hết hạn và quá hạn
+                check_and_notify_due_books()
+                # Cập nhật badge
+                self.update_notification_badge()
+            except Exception:
+                pass
+            # Lặp lại mỗi 5 phút
+            self.after(300000, check)
+        
+        # Kiểm tra ngay khi khởi động
+        self.after(1000, check)
+    
+    def start_session_timer(self):
+        """Bắt đầu đếm thời gian session"""
+        if self.session_timer_id:
+            self.after_cancel(self.session_timer_id)
+        self.session_timer_id = self.after(self.SESSION_TIMEOUT, self.session_expired)
+    
+    def reset_session_timer(self, event=None):
+        """Reset session timer khi có hoạt động"""
+        self.start_session_timer()
+    
+    def session_expired(self):
+        """Xử lý khi session hết hạn"""
+        messagebox.showwarning(
+            "Phiên làm việc hết hạn",
+            "Bạn đã không hoạt động trong 30 phút.\nVui lòng đăng nhập lại!"
+        )
+        self.force_logout()
+    
+    def force_logout(self):
+        """Đăng xuất bắt buộc (không hỏi xác nhận)"""
+        self.destroy()
+        self.parent.deiconify()
         
     def logout(self):
         """Đăng xuất"""
         if messagebox.askyesno("Xác nhận", "Bạn có chắc chắn muốn đăng xuất?"):
+            if self.session_timer_id:
+                self.after_cancel(self.session_timer_id)
             self.destroy()
             self.parent.deiconify()  # Hiện lại cửa sổ đăng nhập
             
     def on_closing(self):
         """Xử lý đóng cửa sổ"""
         if messagebox.askyesno("Xác nhận", "Bạn có chắc chắn muốn thoát?"):
+            if self.session_timer_id:
+                self.after_cancel(self.session_timer_id)
             self.parent.destroy()
             self.destroy()

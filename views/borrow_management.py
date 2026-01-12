@@ -11,9 +11,9 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from database import (get_all_borrows, get_borrow_by_id, create_borrow, return_book,
-                      calculate_fine, get_all_readers, get_all_books, get_all_staff)
+                      calculate_fine, get_all_readers, get_all_books, get_all_staff, count_borrows)
 from utils.report_generator import generate_borrow_receipt, generate_return_receipt
-from utils import treeview_sort_column
+from utils import treeview_sort_column, PaginationFrame, center_window
 
 
 class BorrowManagement(ctk.CTkFrame):
@@ -173,13 +173,43 @@ class BorrowManagement(ctk.CTkFrame):
         )
         self.print_return_btn.pack(side="left", padx=5)
         
+        # Pagination frame
+        self.pagination = PaginationFrame(
+            self,
+            total_items=0,
+            items_per_page=20,
+            on_page_change=self.on_page_change
+        )
+        self.pagination.pack(fill="x", padx=20, pady=(0, 10))
+        
+    def on_page_change(self, page, per_page):
+        """Điều hướng khi chuyển trang"""
+        self.load_borrows_page()
+        
     def load_borrows(self):
         """Tải danh sách phiếu mượn"""
+        # Reset pagination
+        total = count_borrows()
+        self.pagination.set_total(total)
+        self.pagination.current_page = 1
+        self.pagination.update_display()
+        
+        self.load_borrows_page()
+    
+    def load_borrows_page(self):
+        """Tải dữ liệu cho trang hiện tại"""
         for item in self.tree.get_children():
             self.tree.delete(item)
             
-        borrows = get_all_borrows()
+        borrows = get_all_borrows(
+            limit=self.pagination.get_limit(),
+            offset=self.pagination.get_offset()
+        )
         
+        self._populate_tree(borrows)
+    
+    def _populate_tree(self, borrows):
+        """Điền dữ liệu vào tree"""
         for borrow in borrows:
             trang_thai_map = {
                 'DANG_MUON': '📖 Đang mượn',
@@ -222,38 +252,23 @@ class BorrowManagement(ctk.CTkFrame):
         }
         status = status_map.get(status_name)
         
+        # Update pagination total
+        total = count_borrows(search_term, status)
+        self.pagination.set_total(total)
+        self.pagination.current_page = 1
+        self.pagination.update_display()
+        
         for item in self.tree.get_children():
             self.tree.delete(item)
             
-        borrows = get_all_borrows(search_term, status)
+        borrows = get_all_borrows(
+            search_term, 
+            status,
+            limit=self.pagination.get_limit(),
+            offset=self.pagination.get_offset()
+        )
         
-        for borrow in borrows:
-            trang_thai_map = {
-                'DANG_MUON': '📖 Đang mượn',
-                'DA_TRA': '✅ Đã trả',
-                'QUA_HAN': '⚠️ Quá hạn'
-            }
-            
-            if borrow['trang_thai_phieu'] == 'DANG_MUON':
-                ngay_hen_tra = datetime.strptime(borrow['ngay_hen_tra'], '%Y-%m-%d')
-                if datetime.now() > ngay_hen_tra:
-                    trang_thai = '⚠️ Quá hạn'
-                else:
-                    trang_thai = trang_thai_map.get(borrow['trang_thai_phieu'])
-            else:
-                trang_thai = trang_thai_map.get(borrow['trang_thai_phieu'], borrow['trang_thai_phieu'])
-            
-            self.tree.insert("", "end", values=(
-                borrow['ma_phieu'],
-                borrow['ma_doc_gia'],
-                borrow['ten_doc_gia'],
-                borrow['tieu_de'],
-                borrow['ngay_muon'],
-                borrow['ngay_hen_tra'],
-                borrow['ngay_tra_thuc'] or "-",
-                trang_thai,
-                f"{borrow['tien_phat']:,.0f}đ" if borrow['tien_phat'] else "0đ"
-            ))
+        self._populate_tree(borrows)
             
     def on_select(self, event):
         """Xử lý khi chọn item"""
@@ -323,9 +338,9 @@ class BorrowManagement(ctk.CTkFrame):
         # Dialog xác nhận
         dialog = ctk.CTkToplevel(self)
         dialog.title("Xác nhận trả sách")
-        dialog.geometry("400x350")
         dialog.transient(self)
         dialog.grab_set()
+        center_window(dialog, 400, 350)
         
         frame = ctk.CTkFrame(dialog, fg_color="transparent")
         frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -391,46 +406,195 @@ class BorrowManagement(ctk.CTkFrame):
             
         dialog = ctk.CTkToplevel(self)
         dialog.title(f"Chi tiết phiếu mượn #{borrow['ma_phieu']}")
-        dialog.geometry("450x450")
         dialog.transient(self)
         dialog.grab_set()
+        center_window(dialog, 500, 580)
+        
+        # Header với màu theo trạng thái
+        trang_thai = borrow['trang_thai_phieu']
+        
+        # Kiểm tra quá hạn dựa trên ngày hẹn trả
+        is_overdue = False
+        if trang_thai == 'DANG_MUON' and borrow['ngay_hen_tra']:
+            try:
+                ngay_hen_tra = datetime.strptime(borrow['ngay_hen_tra'], '%Y-%m-%d').date()
+                if ngay_hen_tra < datetime.now().date():
+                    is_overdue = True
+            except:
+                pass
+        
+        if trang_thai == 'DA_TRA':
+            header_color = "#28a745"  # Green
+            status_text = "✅ ĐÃ TRẢ"
+        elif is_overdue:
+            header_color = "#dc3545"  # Red
+            status_text = "⚠️ QUÁ HẠN"
+        else:
+            header_color = "#17a2b8"  # Blue
+            status_text = "📖 ĐANG MƯỢN"
+        
+        header = ctk.CTkFrame(dialog, fg_color=header_color, height=60)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        
+        ctk.CTkLabel(
+            header,
+            text=f"PHIẾU MƯỢN #{borrow['ma_phieu']} - {status_text}",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color="white"
+        ).pack(expand=True)
         
         frame = ctk.CTkScrollableFrame(dialog)
-        frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        ctk.CTkLabel(frame, text=f"PHIẾU MƯỢN #{borrow['ma_phieu']}",
-                    font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(0, 15))
+        frame.pack(fill="both", expand=True, padx=20, pady=15)
         
         # Thông tin đọc giả
-        ctk.CTkLabel(frame, text="📚 THÔNG TIN ĐỌC GIẢ",
-                    font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(10, 5))
-        ctk.CTkLabel(frame, text=f"Mã đọc giả: {borrow['ma_doc_gia']}").pack(anchor="w")
-        ctk.CTkLabel(frame, text=f"Họ tên: {borrow['ten_doc_gia']}").pack(anchor="w")
-        ctk.CTkLabel(frame, text=f"Địa chỉ: {borrow['dia_chi'] or 'N/A'}").pack(anchor="w")
-        ctk.CTkLabel(frame, text=f"SĐT: {borrow['so_dt'] or 'N/A'}").pack(anchor="w")
+        section1 = ctk.CTkFrame(frame, fg_color=("gray90", "gray20"))
+        section1.pack(fill="x", pady=5)
+        ctk.CTkLabel(section1, text="📚 THÔNG TIN ĐỌC GIẢ",
+                    font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        info_frame1 = ctk.CTkFrame(section1, fg_color="transparent")
+        info_frame1.pack(fill="x", padx=10, pady=(0, 10))
+        
+        for label, value in [
+            ("Mã đọc giả:", borrow['ma_doc_gia']),
+            ("Họ tên:", borrow['ten_doc_gia']),
+            ("Địa chỉ:", borrow['dia_chi'] or 'N/A'),
+            ("SĐT:", borrow['so_dt'] or 'N/A')
+        ]:
+            row = ctk.CTkFrame(info_frame1, fg_color="transparent")
+            row.pack(fill="x", pady=1)
+            ctk.CTkLabel(row, text=label, width=100, anchor="w").pack(side="left")
+            ctk.CTkLabel(row, text=str(value), anchor="w").pack(side="left", padx=5)
         
         # Thông tin sách
-        ctk.CTkLabel(frame, text="📖 THÔNG TIN SÁCH",
-                    font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(15, 5))
-        ctk.CTkLabel(frame, text=f"Tên sách: {borrow['tieu_de']}").pack(anchor="w")
-        ctk.CTkLabel(frame, text=f"Tác giả: {borrow['tac_gia'] or 'N/A'}").pack(anchor="w")
-        ctk.CTkLabel(frame, text=f"Thể loại: {borrow['ten_the_loai'] or 'N/A'}").pack(anchor="w")
+        section2 = ctk.CTkFrame(frame, fg_color=("gray90", "gray20"))
+        section2.pack(fill="x", pady=5)
+        ctk.CTkLabel(section2, text="📖 THÔNG TIN SÁCH",
+                    font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        info_frame2 = ctk.CTkFrame(section2, fg_color="transparent")
+        info_frame2.pack(fill="x", padx=10, pady=(0, 10))
+        
+        for label, value in [
+            ("Tên sách:", borrow['tieu_de']),
+            ("Tác giả:", borrow['tac_gia'] or 'N/A'),
+            ("Thể loại:", borrow['ten_the_loai'] or 'N/A')
+        ]:
+            row = ctk.CTkFrame(info_frame2, fg_color="transparent")
+            row.pack(fill="x", pady=1)
+            ctk.CTkLabel(row, text=label, width=100, anchor="w").pack(side="left")
+            ctk.CTkLabel(row, text=str(value), anchor="w").pack(side="left", padx=5)
         
         # Thông tin mượn trả
-        ctk.CTkLabel(frame, text="📅 THÔNG TIN MƯỢN TRẢ",
-                    font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(15, 5))
-        ctk.CTkLabel(frame, text=f"Ngày mượn: {borrow['ngay_muon']}").pack(anchor="w")
-        ctk.CTkLabel(frame, text=f"Hạn trả: {borrow['ngay_hen_tra']}").pack(anchor="w")
-        ctk.CTkLabel(frame, text=f"Ngày trả thực tế: {borrow['ngay_tra_thuc'] or 'Chưa trả'}").pack(anchor="w")
-        ctk.CTkLabel(frame, text=f"Trạng thái: {borrow['trang_thai_phieu']}").pack(anchor="w")
-        ctk.CTkLabel(frame, text=f"Tiền phạt: {borrow['tien_phat']:,.0f} VND").pack(anchor="w")
+        section3 = ctk.CTkFrame(frame, fg_color=("gray90", "gray20"))
+        section3.pack(fill="x", pady=5)
+        ctk.CTkLabel(section3, text="📅 THÔNG TIN MƯỢN TRẢ",
+                    font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        info_frame3 = ctk.CTkFrame(section3, fg_color="transparent")
+        info_frame3.pack(fill="x", padx=10, pady=(0, 10))
+        
+        for label, value in [
+            ("Ngày mượn:", borrow['ngay_muon']),
+            ("Hạn trả:", borrow['ngay_hen_tra']),
+            ("Ngày trả thực tế:", borrow['ngay_tra_thuc'] or 'Chưa trả'),
+            ("Tiền phạt:", f"{borrow['tien_phat']:,.0f} VND")
+        ]:
+            row = ctk.CTkFrame(info_frame3, fg_color="transparent")
+            row.pack(fill="x", pady=1)
+            ctk.CTkLabel(row, text=label, width=120, anchor="w").pack(side="left")
+            ctk.CTkLabel(row, text=str(value), anchor="w").pack(side="left", padx=5)
         
         # Nhân viên xử lý
-        ctk.CTkLabel(frame, text="👤 NHÂN VIÊN XỬ LÝ",
-                    font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(15, 5))
-        ctk.CTkLabel(frame, text=f"{borrow['ten_nhan_vien']} ({borrow['ma_nhan_vien']})").pack(anchor="w")
+        section4 = ctk.CTkFrame(frame, fg_color=("gray90", "gray20"))
+        section4.pack(fill="x", pady=5)
+        ctk.CTkLabel(section4, text="👤 NHÂN VIÊN XỬ LÝ",
+                    font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        ctk.CTkLabel(section4, text=f"{borrow['ten_nhan_vien']} ({borrow['ma_nhan_vien']})").pack(anchor="w", padx=10, pady=(0, 10))
         
-        ctk.CTkButton(dialog, text="Đóng", command=dialog.destroy).pack(pady=10)
+        # Nút chức năng
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=15)
+        
+        # Nút đóng
+        ctk.CTkButton(
+            btn_frame, 
+            text="Đóng", 
+            command=dialog.destroy,
+            width=80
+        ).pack(side="left")
+        
+        # Các nút chức năng theo trạng thái
+        if trang_thai == 'DANG_MUON' or trang_thai == 'QUA_HAN':
+            # Nút trả sách
+            def return_and_close():
+                dialog.destroy()
+                self.return_selected()
+            
+            ctk.CTkButton(
+                btn_frame,
+                text="📤 Trả sách",
+                command=return_and_close,
+                width=100,
+                fg_color="#28a745",
+                hover_color="#218838"
+            ).pack(side="right", padx=5)
+            
+            # Nút in phiếu mượn
+            def print_borrow():
+                try:
+                    output_path = generate_borrow_receipt(borrow)
+                    messagebox.showinfo("Thành công", f"Đã tạo phiếu mượn:\n{output_path}")
+                    os.startfile(output_path)
+                except Exception as e:
+                    messagebox.showerror("Lỗi", f"Không thể tạo phiếu: {str(e)}")
+            
+            ctk.CTkButton(
+                btn_frame,
+                text="🖨️ In phiếu mượn",
+                command=print_borrow,
+                width=120,
+                fg_color="#17a2b8",
+                hover_color="#138496"
+            ).pack(side="right", padx=5)
+            
+        elif trang_thai == 'DA_TRA':
+            # Nút in phiếu trả
+            def print_return():
+                try:
+                    output_path = generate_return_receipt(borrow)
+                    messagebox.showinfo("Thành công", f"Đã tạo phiếu trả:\n{output_path}")
+                    os.startfile(output_path)
+                except Exception as e:
+                    messagebox.showerror("Lỗi", f"Không thể tạo phiếu: {str(e)}")
+            
+            ctk.CTkButton(
+                btn_frame,
+                text="🖨️ In phiếu trả",
+                command=print_return,
+                width=120,
+                fg_color="#6c757d",
+                hover_color="#5a6268"
+            ).pack(side="right", padx=5)
+            
+            # Nút in phiếu mượn (lưu trữ)
+            def print_borrow():
+                try:
+                    output_path = generate_borrow_receipt(borrow)
+                    messagebox.showinfo("Thành công", f"Đã tạo phiếu mượn:\n{output_path}")
+                    os.startfile(output_path)
+                except Exception as e:
+                    messagebox.showerror("Lỗi", f"Không thể tạo phiếu: {str(e)}")
+            
+            ctk.CTkButton(
+                btn_frame,
+                text="🖨️ In phiếu mượn",
+                command=print_borrow,
+                width=120,
+                fg_color="#17a2b8",
+                hover_color="#138496"
+            ).pack(side="right", padx=5)
         
     def print_borrow_receipt(self):
         """In phiếu mượn"""
@@ -474,17 +638,18 @@ class BorrowDialog(ctk.CTkToplevel):
         super().__init__(parent)
         
         self.title("Tạo phiếu mượn mới")
-        self.geometry("500x450")
         self.transient(parent)
         self.grab_set()
+        center_window(self, 500, 450)
         
         self.user = user
         self.result = None
         
         # Load data
         self.readers = get_all_readers()
-        self.books = [b for b in get_all_books() if b['trang_thai_sach'] == 'CO_SAN' and 
-                     (b['loai_sach'] == 'SACH_ONLINE' or b['so_luong'] > 0)]
+        # Lọc sách có sẵn: sách online hoặc sách giấy có quyển có sẵn
+        self.books = [b for b in get_all_books() if 
+                     b['loai_sach'] == 'SACH_ONLINE' or b.get('so_quyen_co_san', b.get('so_luong', 0)) > 0]
         self.staff = get_all_staff()
         
         self.create_widgets()
@@ -560,23 +725,38 @@ class BorrowDialog(ctk.CTkToplevel):
         
         ctk.CTkButton(btn_frame, text="Hủy", command=self.destroy, 
                      fg_color="gray", width=100).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="Tạo phiếu", command=self.save, 
-                     width=120).pack(side="right", padx=5)
+        self.save_btn = ctk.CTkButton(btn_frame, text="Tạo phiếu", command=self.save, 
+                     width=120)
+        self.save_btn.pack(side="right", padx=5)
         
     def save(self):
         """Lưu phiếu mượn"""
+        # Disable button ngay khi click để tránh double-submit
+        self.save_btn.configure(state="disabled", text="⏳ Đang xử lý...")
+        
         reader_sel = self.reader_var.get()
         book_sel = self.book_var.get()
         staff_sel = self.staff_var.get()
         
         if not all([reader_sel, book_sel, staff_sel]):
             messagebox.showwarning("Cảnh báo", "Vui lòng chọn đầy đủ thông tin!")
+            self.save_btn.configure(state="normal", text="Tạo phiếu")
             return
         
         try:
             so_ngay = int(self.days_entry.get())
-        except:
-            so_ngay = 14
+            if so_ngay <= 0:
+                messagebox.showwarning("Cảnh báo", "Số ngày mượn phải lớn hơn 0!")
+                self.save_btn.configure(state="normal", text="Tạo phiếu")
+                return
+            if so_ngay > 30:
+                messagebox.showwarning("Cảnh báo", "Số ngày mượn tối đa là 30 ngày!")
+                self.save_btn.configure(state="normal", text="Tạo phiếu")
+                return
+        except ValueError:
+            messagebox.showwarning("Cảnh báo", "Số ngày phải là số nguyên!")
+            self.save_btn.configure(state="normal", text="Tạo phiếu")
+            return
         
         # Lấy ID từ selection
         reader_code = reader_sel.split(" - ")[0]

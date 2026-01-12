@@ -11,9 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from database import (get_all_readers, get_reader_by_id, add_reader, 
                       update_reader, delete_reader, update_reader_card,
-                      get_reader_borrow_history)
+                      get_reader_borrow_history, count_readers)
 from utils.report_generator import generate_reader_card
-from utils import treeview_sort_column
+from utils import treeview_sort_column, PaginationFrame, center_window
 
 
 class ReaderManagement(ctk.CTkFrame):
@@ -164,13 +164,45 @@ class ReaderManagement(ctk.CTkFrame):
         )
         self.print_card_btn.pack(side="left", padx=5)
         
+        # Pagination frame
+        self.pagination = PaginationFrame(
+            self,
+            total_items=0,
+            items_per_page=20,
+            on_page_change=self.on_page_change
+        )
+        self.pagination.pack(fill="x", padx=20, pady=(0, 10))
+        
+    def on_page_change(self, page, per_page):
+        """Điều hướng khi chuyển trang"""
+        self.load_readers_page()
+        
     def load_readers(self):
-        """Tải danh sách đọc giả"""
+        """Đặt lại và tải danh sách đọc giả"""
+        self.search_entry.delete(0, 'end')
+        
+        # Reset pagination
+        total = count_readers()
+        self.pagination.set_total(total)
+        self.pagination.current_page = 1
+        self.pagination.update_display()
+        
+        self.load_readers_page()
+    
+    def load_readers_page(self):
+        """Tải dữ liệu cho trang hiện tại"""
         for item in self.tree.get_children():
             self.tree.delete(item)
             
-        readers = get_all_readers()
+        readers = get_all_readers(
+            limit=self.pagination.get_limit(),
+            offset=self.pagination.get_offset()
+        )
         
+        self._populate_tree(readers)
+    
+    def _populate_tree(self, readers):
+        """Điền dữ liệu vào tree"""
         for reader in readers:
             trang_thai_map = {
                 'HOAT_DONG': '✅ Hoạt động',
@@ -192,27 +224,22 @@ class ReaderManagement(ctk.CTkFrame):
         """Tìm kiếm đọc giả"""
         search_term = self.search_entry.get()
         
+        # Update pagination total
+        total = count_readers(search_term)
+        self.pagination.set_total(total)
+        self.pagination.current_page = 1
+        self.pagination.update_display()
+        
         for item in self.tree.get_children():
             self.tree.delete(item)
             
-        readers = get_all_readers(search_term)
+        readers = get_all_readers(
+            search_term,
+            limit=self.pagination.get_limit(),
+            offset=self.pagination.get_offset()
+        )
         
-        for reader in readers:
-            trang_thai_map = {
-                'HOAT_DONG': '✅ Hoạt động',
-                'HET_HAN': '⚠️ Hết hạn',
-                'KHOA': '🔒 Khóa'
-            }
-            trang_thai = trang_thai_map.get(reader['trang_thai_the'], reader['trang_thai_the'] or 'N/A')
-            
-            self.tree.insert("", "end", iid=reader['ma_nd'], values=(
-                reader['ma_doc_gia'],
-                reader['ho_ten'],
-                reader['so_dt'] or "N/A",
-                reader['email'] or "N/A",
-                reader['ngay_dk'],
-                trang_thai
-            ))
+        self._populate_tree(readers)
             
     def on_select(self, event):
         """Xử lý khi chọn item"""
@@ -296,9 +323,9 @@ class ReaderManagement(ctk.CTkFrame):
             
         dialog = ctk.CTkToplevel(self)
         dialog.title("Cập nhật thẻ đọc giả")
-        dialog.geometry("400x300")
         dialog.transient(self)
         dialog.grab_set()
+        center_window(dialog, 400, 300)
         
         frame = ctk.CTkFrame(dialog, fg_color="transparent")
         frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -328,8 +355,12 @@ class ReaderManagement(ctk.CTkFrame):
         def save():
             try:
                 extend_days = int(extend_entry.get())
-            except:
-                extend_days = 0
+                if extend_days < 0:
+                    messagebox.showwarning("Cảnh báo", "Số ngày gia hạn không được âm!")
+                    return
+            except ValueError:
+                messagebox.showwarning("Cảnh báo", "Số ngày phải là số nguyên!")
+                return
             
             update_reader_card(self.selected_reader, status_var.get(), extend_days)
             messagebox.showinfo("Thành công", "Cập nhật thẻ thành công!")
@@ -348,9 +379,9 @@ class ReaderManagement(ctk.CTkFrame):
         
         dialog = ctk.CTkToplevel(self)
         dialog.title(f"Lịch sử mượn sách - {reader['ho_ten']}")
-        dialog.geometry("700x400")
         dialog.transient(self)
         dialog.grab_set()
+        center_window(dialog, 700, 400)
         
         frame = ctk.CTkFrame(dialog)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
@@ -422,9 +453,9 @@ class ReaderDialog(ctk.CTkToplevel):
         super().__init__(parent)
         
         self.title(title)
-        self.geometry("400x400")
         self.transient(parent)
         self.grab_set()
+        center_window(self, 400, 400)
         
         self.reader = reader
         self.result = None
@@ -482,19 +513,35 @@ class ReaderDialog(ctk.CTkToplevel):
         
     def save(self):
         """Lưu thông tin"""
+        import re
+        
         ho_ten = self.name_entry.get().strip()
+        so_dt = self.phone_entry.get().strip()
+        email = self.email_entry.get().strip()
         
         if not ho_ten:
             messagebox.showwarning("Cảnh báo", "Vui lòng nhập họ tên!")
             return
+        
+        # Validate số điện thoại (10-11 số)
+        if so_dt:
+            if not re.match(r'^\d{10,11}$', so_dt):
+                messagebox.showwarning("Cảnh báo", "Số điện thoại phải có 10-11 chữ số!")
+                return
+        
+        # Validate email
+        if email:
+            if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
+                messagebox.showwarning("Cảnh báo", "Email không hợp lệ!")
+                return
         
         if self.reader:
             # Update
             self.result = {
                 'ho_ten': ho_ten,
                 'dia_chi': self.address_entry.get().strip() or None,
-                'so_dt': self.phone_entry.get().strip() or None,
-                'email': self.email_entry.get().strip() or None
+                'so_dt': so_dt or None,
+                'email': email or None
             }
         else:
             # Add new
@@ -506,8 +553,8 @@ class ReaderDialog(ctk.CTkToplevel):
             self.result = {
                 'ho_ten': ho_ten,
                 'dia_chi': self.address_entry.get().strip() or None,
-                'so_dt': self.phone_entry.get().strip() or None,
-                'email': self.email_entry.get().strip() or None,
+                'so_dt': so_dt or None,
+                'email': email or None,
                 'ma_doc_gia': ma_doc_gia.upper()
             }
             

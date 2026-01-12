@@ -10,7 +10,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from database import get_all_staff, add_staff, update_staff, delete_staff
-from utils import treeview_sort_column
+from utils import treeview_sort_column, center_window
 
 
 class StaffManagement(ctk.CTkFrame):
@@ -257,9 +257,9 @@ class StaffDialog(ctk.CTkToplevel):
         super().__init__(parent)
         
         self.title(title)
-        self.geometry("400x380")
         self.transient(parent)
         self.grab_set()
+        center_window(self, 400, 380)
         
         self.staff = staff
         self.result = None
@@ -271,42 +271,40 @@ class StaffDialog(ctk.CTkToplevel):
             
     def create_widgets(self):
         """Tạo các widget"""
-        frame = ctk.CTkFrame(self, fg_color="transparent")
-        frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        # Mã nhân viên (chỉ khi thêm mới)
-        if not self.staff:
-            ctk.CTkLabel(frame, text="Mã nhân viên: *", anchor="w").pack(fill="x", pady=(0, 5))
-            self.code_entry = ctk.CTkEntry(frame, placeholder_text="VD: NV002")
-            self.code_entry.pack(fill="x", pady=(0, 10))
-        
+        # Main container + scrollable content so dialog can scroll when needed
+        main_container = ctk.CTkFrame(self, fg_color="transparent")
+        main_container.pack(fill="both", expand=True, padx=12, pady=12)
+
+        content = ctk.CTkScrollableFrame(main_container, fg_color="transparent")
+        content.pack(fill="both", expand=True, pady=(0, 10))
+
+        # Mã nhân viên sẽ được tự động sinh khi thêm mới
+        # (nên không hiện trường nhập mã)
         # Họ tên
-        ctk.CTkLabel(frame, text="Họ tên: *", anchor="w").pack(fill="x", pady=(0, 5))
-        self.name_entry = ctk.CTkEntry(frame)
+        ctk.CTkLabel(content, text="Họ tên: *", anchor="w").pack(fill="x", pady=(0, 5))
+        self.name_entry = ctk.CTkEntry(content)
         self.name_entry.pack(fill="x", pady=(0, 10))
         
         # Địa chỉ
-        ctk.CTkLabel(frame, text="Địa chỉ:", anchor="w").pack(fill="x", pady=(0, 5))
-        self.address_entry = ctk.CTkEntry(frame)
+        ctk.CTkLabel(content, text="Địa chỉ:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.address_entry = ctk.CTkEntry(content)
         self.address_entry.pack(fill="x", pady=(0, 10))
-        
+
         # Số điện thoại
-        ctk.CTkLabel(frame, text="Số điện thoại:", anchor="w").pack(fill="x", pady=(0, 5))
-        self.phone_entry = ctk.CTkEntry(frame)
+        ctk.CTkLabel(content, text="Số điện thoại:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.phone_entry = ctk.CTkEntry(content)
         self.phone_entry.pack(fill="x", pady=(0, 10))
-        
+
         # Email
-        ctk.CTkLabel(frame, text="Email:", anchor="w").pack(fill="x", pady=(0, 5))
-        self.email_entry = ctk.CTkEntry(frame)
+        ctk.CTkLabel(content, text="Email:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.email_entry = ctk.CTkEntry(content)
         self.email_entry.pack(fill="x", pady=(0, 10))
         
-        # Buttons
-        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        btn_frame.pack(fill="x", pady=20)
-        
-        ctk.CTkButton(btn_frame, text="Hủy", command=self.destroy, 
-                     fg_color="gray", width=100).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="Lưu", command=self.save, width=100).pack(side="right", padx=5)
+        # Fixed buttons at bottom
+        btn_frame = ctk.CTkFrame(main_container, fg_color="transparent")
+        btn_frame.pack(fill="x", side="bottom")
+        ctk.CTkButton(btn_frame, text="Hủy", command=self.destroy, fg_color="gray", width=100).pack(side="left", padx=12, pady=10)
+        ctk.CTkButton(btn_frame, text="Lưu", command=self.save, width=100).pack(side="right", padx=12, pady=10)
         
     def populate_fields(self):
         """Điền dữ liệu khi sửa"""
@@ -314,36 +312,68 @@ class StaffDialog(ctk.CTkToplevel):
         self.address_entry.insert(0, self.staff['dia_chi'] or "")
         self.phone_entry.insert(0, self.staff['so_dt'] or "")
         self.email_entry.insert(0, self.staff['email'] or "")
+        # No account fields in this dialog anymore
         
     def save(self):
         """Lưu thông tin"""
+        import re
+
         ho_ten = self.name_entry.get().strip()
-        
+        so_dt = self.phone_entry.get().strip()
+        email = self.email_entry.get().strip()
+
         if not ho_ten:
             messagebox.showwarning("Cảnh báo", "Vui lòng nhập họ tên!")
             return
-        
+
+        # Validate số điện thoại (10-11 số)
+        if so_dt:
+            if not re.match(r'^\d{10,11}$', so_dt):
+                messagebox.showwarning("Cảnh báo", "Số điện thoại phải có 10-11 chữ số!")
+                return
+
+        # Validate email
+        if email:
+            if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
+                messagebox.showwarning("Cảnh báo", "Email không hợp lệ!")
+                return
+
         if self.staff:
-            # Update
+            # Update existing staff
             self.result = {
                 'ho_ten': ho_ten,
                 'dia_chi': self.address_entry.get().strip() or None,
-                'so_dt': self.phone_entry.get().strip() or None,
-                'email': self.email_entry.get().strip() or None
+                'so_dt': so_dt or None,
+                'email': email or None
             }
         else:
-            # Add new
-            ma_nhan_vien = self.code_entry.get().strip()
-            if not ma_nhan_vien:
-                messagebox.showwarning("Cảnh báo", "Vui lòng nhập mã nhân viên!")
-                return
-                
+            # Auto-generate staff code: find max existing numeric suffix and increment
+            staff_list = get_all_staff()
+            max_num = 0
+            for s in staff_list:
+                code = s.get('ma_nhan_vien') or ''
+                m = re.search(r"(\d+)$", code)
+                if m:
+                    try:
+                        num = int(m.group(1))
+                        if num > max_num:
+                            max_num = num
+                    except:
+                        pass
+
+            next_num = max_num + 1
+            ma_nhan_vien = f"NV{next_num:03d}"
+
+            # Account creation is mandatory and will use ma_nhan_vien as default username/password
             self.result = {
                 'ho_ten': ho_ten,
                 'dia_chi': self.address_entry.get().strip() or None,
-                'so_dt': self.phone_entry.get().strip() or None,
-                'email': self.email_entry.get().strip() or None,
-                'ma_nhan_vien': ma_nhan_vien.upper()
+                'so_dt': so_dt or None,
+                'email': email or None,
+                'ma_nhan_vien': ma_nhan_vien,
+                'create_account': True,
+                'username': None,
+                'password': None
             }
-            
+
         self.destroy()

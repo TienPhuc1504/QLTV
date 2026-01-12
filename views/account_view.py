@@ -8,7 +8,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from database import get_reader_by_id, get_staff_by_id, change_password
+from database import get_reader_by_id, get_staff_by_id, change_password, create_card_request
 
 
 class AccountView(ctk.CTkFrame):
@@ -152,6 +152,27 @@ class AccountView(ctk.CTkFrame):
         ]
         
         self.display_info_rows(info_data)
+        # Button: Yêu cầu in thẻ / Yêu cầu cấp lại thẻ
+        btn_frame = ctk.CTkFrame(self.info_frame, fg_color="transparent")
+        btn_frame.pack(pady=(15, 20))
+
+        has_card = bool(reader.get('ma_the'))
+        btn_text = "Yêu cầu cấp lại thẻ" if has_card else "Yêu cầu in thẻ"
+
+        def on_request_card():
+            try:
+                create_card_request(reader['ma_nd'])
+                messagebox.showinfo("Thành công", "Đã gửi yêu cầu in thẻ! Nhân viên sẽ xử lý sớm.")
+                self.load_info()
+            except Exception as e:
+                messagebox.showerror("Lỗi", str(e))
+
+        ctk.CTkButton(
+            btn_frame,
+            text=btn_text,
+            command=on_request_card,
+            width=220
+        ).pack()
         
     def show_staff_info(self, staff: dict):
         """Hiển thị thông tin nhân viên"""

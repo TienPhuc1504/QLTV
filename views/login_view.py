@@ -10,6 +10,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from database import authenticate_user, init_database, insert_sample_data
+from utils import center_window as center_window_util
 
 
 class LoginView(ctk.CTk):
@@ -42,12 +43,7 @@ class LoginView(ctk.CTk):
         
     def center_window(self):
         """Căn giữa cửa sổ trên màn hình"""
-        self.update_idletasks()
-        width = 400
-        height = 650
-        x = (self.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.winfo_screenheight() // 2) - (height // 2)
-        self.geometry(f'{width}x{height}+{x}+{y}')
+        center_window_util(self, 400, 650)
         
     def create_widgets(self):
         """Tạo các widget giao diện"""
@@ -142,6 +138,20 @@ class LoginView(ctk.CTk):
         )
         login_btn.pack(fill="x", pady=(0, 10))
         
+        # Register button
+        register_btn = ctk.CTkButton(
+            form_frame,
+            text="ĐĂNG KÝ",
+            command=self.open_register_dialog,
+            height=40,
+            font=ctk.CTkFont(size=12),
+            fg_color="transparent",
+            border_width=1,
+            text_color=("gray10", "gray90"),
+            hover_color=("gray80", "gray30")
+        )
+        register_btn.pack(fill="x", pady=(0, 10))
+
         # Exit button
         exit_btn = ctk.CTkButton(
             form_frame,
@@ -221,6 +231,89 @@ class LoginView(ctk.CTk):
         main_view = MainView(self, user)
         main_view.mainloop()
 
+    def open_register_dialog(self):
+        dialog = RegisterDialog(self)
+        self.wait_window(dialog)
+
+
+class RegisterDialog(ctk.CTkToplevel):
+    """Dialog đăng ký tài khoản mới"""
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Đăng ký tài khoản")
+        self.transient(parent)
+        self.grab_set()
+        center_window_util(self, 420, 520)
+        # Main container
+        main_container = ctk.CTkFrame(self, fg_color="transparent")
+        main_container.pack(fill="both", expand=True, padx=12, pady=12)
+
+        # Scrollable content area
+        scroll_frame = ctk.CTkScrollableFrame(main_container, fg_color="transparent")
+        scroll_frame.pack(fill="both", expand=True, pady=(0, 10))
+
+        ctk.CTkLabel(scroll_frame, text="Họ và tên:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.name_entry = ctk.CTkEntry(scroll_frame)
+        self.name_entry.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(scroll_frame, text="Tên đăng nhập:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.username_entry_reg = ctk.CTkEntry(scroll_frame)
+        self.username_entry_reg.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(scroll_frame, text="Mật khẩu:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.password_entry_reg = ctk.CTkEntry(scroll_frame, show="•")
+        self.password_entry_reg.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(scroll_frame, text="Xác nhận mật khẩu:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.password_confirm_entry = ctk.CTkEntry(scroll_frame, show="•")
+        self.password_confirm_entry.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(scroll_frame, text="Địa chỉ:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.address_entry = ctk.CTkEntry(scroll_frame)
+        self.address_entry.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(scroll_frame, text="Số điện thoại:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.phone_entry = ctk.CTkEntry(scroll_frame)
+        self.phone_entry.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(scroll_frame, text="Email:", anchor="w").pack(fill="x", pady=(0, 5))
+        self.email_entry = ctk.CTkEntry(scroll_frame)
+        self.email_entry.pack(fill="x", pady=(0, 10))
+
+        # Loại người dùng mặc định là DOC_GIA (không hiển thị trường chọn)
+        # (Không cần input từ UI)
+
+        # Fixed button frame at bottom
+        btn_frame = ctk.CTkFrame(main_container, fg_color="transparent")
+        btn_frame.pack(fill="x", side="bottom")
+        ctk.CTkButton(btn_frame, text="Hủy", command=self.destroy, fg_color="gray", width=100).pack(side="left", padx=10, pady=10)
+        ctk.CTkButton(btn_frame, text="Đăng ký", command=self.register, width=120).pack(side="right", padx=10, pady=10)
+
+    def register(self):
+        from database import register_user
+
+        ho_ten = self.name_entry.get().strip()
+        username = self.username_entry_reg.get().strip()
+        password = self.password_entry_reg.get()
+        password2 = self.password_confirm_entry.get()
+        dia_chi = self.address_entry.get().strip() or None
+        so_dt = self.phone_entry.get().strip() or None
+        email = self.email_entry.get().strip() or None
+        loai = 'DOC_GIA'
+
+        if not ho_ten or not username or not password:
+            messagebox.showwarning("Cảnh báo", "Vui lòng điền đủ họ tên, tên đăng nhập và mật khẩu!")
+            return
+        if password != password2:
+            messagebox.showwarning("Cảnh báo", "Mật khẩu xác nhận không khớp!")
+            return
+
+        try:
+            register_user(username, password, ho_ten, dia_chi, so_dt, email, loai)
+            messagebox.showinfo("Thành công", "Đăng ký tài khoản thành công! Bạn có thể đăng nhập ngay.")
+            self.destroy()
+        except Exception as e:
+            messagebox.showerror("Lỗi", str(e))
 
 if __name__ == "__main__":
     app = LoginView()
