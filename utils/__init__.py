@@ -1,4 +1,4 @@
-# Utils package
+# Gói utils (tiện ích)
 import customtkinter as ctk
 import threading
 
@@ -76,7 +76,7 @@ class LoadingDialog(ctk.CTkToplevel):
         frame = ctk.CTkFrame(self, corner_radius=10)
         frame.pack(fill="both", expand=True, padx=2, pady=2)
         
-        # Loading icon (animated dots)
+        # Biểu tượng loading (chấm hoạt ảnh)
         self.loading_label = ctk.CTkLabel(
             frame,
             text="⏳",
@@ -96,7 +96,7 @@ class LoadingDialog(ctk.CTkToplevel):
         self.animate()
         
     def animate(self):
-        """Animate loading dots"""
+        """Hoạt ảnh cho biểu tượng loading"""
         icons = ["⏳", "⌛"]
         self.loading_label.configure(text=icons[self.dots % 2])
         self.dots += 1
@@ -153,7 +153,7 @@ class PaginationFrame(ctk.CTkFrame):
         
     def create_widgets(self):
         """Tạo các widget"""
-        # Info label
+        # Nhãn thông tin
         self.info_label = ctk.CTkLabel(
             self,
             text="",
@@ -161,7 +161,7 @@ class PaginationFrame(ctk.CTkFrame):
         )
         self.info_label.pack(side="left", padx=10)
         
-        # Navigation buttons
+        # Nút điều hướng
         nav_frame = ctk.CTkFrame(self, fg_color="transparent")
         nav_frame.pack(side="right", padx=10)
         

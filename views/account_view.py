@@ -1,5 +1,5 @@
 """
-Account View - Thông tin tài khoản
+Thông tin tài khoản
 """
 import customtkinter as ctk
 from tkinter import messagebox
@@ -24,7 +24,7 @@ class AccountView(ctk.CTkFrame):
         
     def create_widgets(self):
         """Tạo các widget"""
-        # Header
+        # Tiêu đề
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(fill="x", padx=20, pady=(20, 10))
         
@@ -35,7 +35,7 @@ class AccountView(ctk.CTkFrame):
         )
         title.pack(side="left")
         
-        # Tabs
+        # Các tab
         self.tabview = ctk.CTkTabview(self)
         self.tabview.pack(fill="both", expand=True, padx=20, pady=10)
         
@@ -57,33 +57,33 @@ class AccountView(ctk.CTkFrame):
         frame = ctk.CTkFrame(parent)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Title
+        # Tiêu đề
         ctk.CTkLabel(
             frame,
             text="ĐỔI MẬT KHẨU",
             font=ctk.CTkFont(size=18, weight="bold")
         ).pack(pady=(30, 20))
         
-        # Form frame
+        # Khung form
         form_frame = ctk.CTkFrame(frame, width=400, fg_color="transparent")
         form_frame.pack()
         
-        # Current password
+        # Mật khẩu hiện tại
         ctk.CTkLabel(form_frame, text="Mật khẩu hiện tại:", font=ctk.CTkFont(size=14)).pack(anchor="w", pady=(20, 5))
         self.current_pw = ctk.CTkEntry(form_frame, show="•", width=300)
         self.current_pw.pack()
         
-        # New password
+        # Mật khẩu mới
         ctk.CTkLabel(form_frame, text="Mật khẩu mới:", font=ctk.CTkFont(size=14)).pack(anchor="w", pady=(15, 5))
         self.new_pw = ctk.CTkEntry(form_frame, show="•", width=300)
         self.new_pw.pack()
         
-        # Confirm password
+        # Xác nhận mật khẩu
         ctk.CTkLabel(form_frame, text="Xác nhận mật khẩu:", font=ctk.CTkFont(size=14)).pack(anchor="w", pady=(15, 5))
         self.confirm_pw = ctk.CTkEntry(form_frame, show="•", width=300)
         self.confirm_pw.pack()
         
-        # Button
+        # Nút
         ctk.CTkButton(
             form_frame,
             text="Đổi mật khẩu",
@@ -91,7 +91,7 @@ class AccountView(ctk.CTkFrame):
             width=300
         ).pack(pady=25)
         
-        # Note
+        # Ghi chú
         ctk.CTkLabel(
             frame,
             text="⚠️ Mật khẩu phải có ít nhất 4 ký tự",

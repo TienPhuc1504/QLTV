@@ -1,5 +1,5 @@
 """
-Statistics View - Thống kê
+Giao diện thống kê
 """
 import customtkinter as ctk
 from tkinter import messagebox, ttk
@@ -26,6 +26,7 @@ class StatisticsView(ctk.CTkFrame):
     def create_widgets(self):
         """Tạo các widget"""
         # Header
+            # Tiêu đề
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(fill="x", padx=20, pady=(20, 10))
         
@@ -37,6 +38,7 @@ class StatisticsView(ctk.CTkFrame):
         title.pack(side="left")
         
         # Export buttons
+            # Các nút xuất báo cáo
         export_books_btn = ctk.CTkButton(
             header_frame,
             text="📊 Xuất thống kê sách",
@@ -56,6 +58,7 @@ class StatisticsView(ctk.CTkFrame):
         export_borrow_btn.pack(side="right", padx=5)
         
         # Main content - scrollable
+            # Nội dung chính - có cuộn
         self.content = ctk.CTkScrollableFrame(self)
         self.content.pack(fill="both", expand=True, padx=20, pady=10)
         
@@ -75,10 +78,12 @@ class StatisticsView(ctk.CTkFrame):
         ).pack(anchor="w", padx=20, pady=(15, 10))
         
         # Cards
+            # Các thẻ thông tin
         cards_frame = ctk.CTkFrame(overview_frame, fg_color="transparent")
         cards_frame.pack(fill="x", padx=20, pady=10)
         
         # Card data
+            # Dữ liệu thẻ
         card_data = [
             ("📚", "Tổng số sách", str(book_stats.get('total_books', 0)), "#3498db"),
             ("📖", "Đang được mượn", str(borrow_stats.get('by_status', {}).get('DANG_MUON', 0)), "#2ecc71"),
@@ -124,6 +129,7 @@ class StatisticsView(ctk.CTkFrame):
             ctk.CTkLabel(row, text=name, width=100, anchor="w").pack(side="left")
             
             # Progress bar simulation
+                # Mô phỏng thanh tiến trình
             bar_frame = ctk.CTkFrame(row, fg_color="#e0e0e0", height=20, corner_radius=5)
             bar_frame.pack(side="left", fill="x", expand=True, padx=10)
             bar_frame.pack_propagate(False)
@@ -148,6 +154,7 @@ class StatisticsView(ctk.CTkFrame):
         ).pack(anchor="w", padx=20, pady=(15, 10))
         
         # Table
+            # Bảng
         table_frame = ctk.CTkFrame(category_frame)
         table_frame.pack(fill="x", padx=20, pady=(0, 15))
         
@@ -182,6 +189,7 @@ class StatisticsView(ctk.CTkFrame):
         ).pack(anchor="w", padx=20, pady=(15, 10))
         
         # Table
+            # Bảng
         table_frame2 = ctk.CTkFrame(popular_frame)
         table_frame2.pack(fill="x", padx=20, pady=(0, 15))
         

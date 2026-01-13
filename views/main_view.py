@@ -1,5 +1,5 @@
 """
-Main View - Giao diện chính của ứng dụng
+Giao diện chính của ứng dụng
 """
 import customtkinter as ctk
 from tkinter import messagebox
@@ -15,11 +15,11 @@ from utils import center_window as center_window_util
 class MainView(ctk.CTkToplevel):
     """Giao diện chính sau khi đăng nhập"""
     
-    # Màu cho menu button
+    # Màu cho nút menu
     ACTIVE_COLOR = "#1f538d"  # Màu khi active
     INACTIVE_COLOR = "transparent"  # Màu khi không active
     
-    # Session timeout (30 phút = 1800000 ms)
+    # Thời gian chờ phiên (30 phút = 1800000 ms)
     SESSION_TIMEOUT = 30 * 60 * 1000
     
     def __init__(self, parent, user: dict):
@@ -37,25 +37,25 @@ class MainView(ctk.CTkToplevel):
         self.geometry("1200x700")
         self.minsize(1000, 600)
         
-        # Xử lý đóng cửa sổ
+        # Xử lý khi đóng cửa sổ
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # Căn giữa
+        # Căn giữa cửa sổ
         self.center_window()
         
         # Tạo giao diện
         self.create_widgets()
         
-        # Cập nhật badge thông báo
+        # Cập nhật chỉ số thông báo
         self.update_notification_badge()
         
         # Bắt đầu kiểm tra thông báo định kỳ
         self.start_notification_checker()
         
-        # Bắt đầu session timeout
+        # Bắt đầu tính thời gian chờ phiên
         self.start_session_timer()
         
-        # Bind các sự kiện để reset session timer
+        # Gắn các sự kiện để reset bộ đếm phiên
         self.bind_all("<Button>", self.reset_session_timer)
         self.bind_all("<Key>", self.reset_session_timer)
         self.bind_all("<Motion>", self.reset_session_timer)
@@ -69,7 +69,7 @@ class MainView(ctk.CTkToplevel):
         
     def create_widgets(self):
         """Tạo giao diện chính"""
-        # Sidebar
+        # Thanh bên (Sidebar)
         self.sidebar = ctk.CTkFrame(self, width=250, corner_radius=0)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
@@ -85,7 +85,7 @@ class MainView(ctk.CTkToplevel):
         )
         logo_label.pack()
         
-        # User info
+        # Thông tin người dùng
         user_frame = ctk.CTkFrame(self.sidebar, fg_color=("gray85", "gray25"))
         user_frame.pack(fill="x", padx=10, pady=10)
         
@@ -107,11 +107,11 @@ class MainView(ctk.CTkToplevel):
         )
         user_role.pack(pady=(0, 10))
         
-        # Menu buttons
+        # Các nút menu
         menu_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         menu_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Dashboard button
+        # Nút Dashboard
         self.dashboard_btn = ctk.CTkButton(
             menu_frame,
             text="📊  Tổng quan",
@@ -279,7 +279,7 @@ class MainView(ctk.CTkToplevel):
         self.account_btn.pack(fill="x", pady=2)
         self.menu_buttons.append(self.account_btn)
         
-        # Logout button
+        # Nút đăng xuất
         logout_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         logout_frame.pack(fill="x", side="bottom", padx=10, pady=20)
         
@@ -294,7 +294,7 @@ class MainView(ctk.CTkToplevel):
         )
         logout_btn.pack(fill="x")
         
-        # Main content area
+        # Khu vực nội dung chính
         self.content_frame = ctk.CTkFrame(self, corner_radius=0)
         self.content_frame.pack(side="right", fill="both", expand=True)
         
@@ -314,11 +314,11 @@ class MainView(ctk.CTkToplevel):
     
     def set_active_button(self, button):
         """Set button là active và reset các button khác"""
-        # Reset tất cả button về trạng thái inactive
+        # Đặt lại trạng thái tất cả nút thành inactive
         for btn in self.menu_buttons:
             btn.configure(fg_color=self.INACTIVE_COLOR, text_color=("gray10", "gray90"))
         
-        # Set button được chọn là active
+        # Đặt nút được chọn thành active
         if button:
             button.configure(fg_color=self.ACTIVE_COLOR, text_color="white")
             self.active_button = button
@@ -376,7 +376,7 @@ class MainView(ctk.CTkToplevel):
         main_content.grid_columnconfigure(1, weight=1)
         main_content.grid_rowconfigure(0, weight=1)
         
-        # Left column - Welcome & Quick actions
+        # Cột trái - Chào mừng & Hành động nhanh
         left_frame = ctk.CTkFrame(main_content)
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=5)
         
@@ -440,7 +440,7 @@ class MainView(ctk.CTkToplevel):
                 width=200
             ).pack(pady=5)
         
-        # Right column - Notifications
+        # Cột phải - Thông báo
         right_frame = ctk.CTkFrame(main_content)
         right_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=5)
         

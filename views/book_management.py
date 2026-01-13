@@ -1,5 +1,5 @@
 """
-Book Management - Quản lý sách
+Quản lý sách
 """
 import customtkinter as ctk
 from tkinter import messagebox, ttk
@@ -30,7 +30,7 @@ class BookManagement(ctk.CTkFrame):
         
     def create_widgets(self):
         """Tạo các widget"""
-        # Header
+        # Tiêu đề
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(fill="x", padx=20, pady=(20, 10))
         
@@ -41,7 +41,7 @@ class BookManagement(ctk.CTkFrame):
         )
         title.pack(side="left")
         
-        # Add button
+        # Nút thêm
         add_btn = ctk.CTkButton(
             header_frame,
             text="➕ Thêm sách",
@@ -50,7 +50,7 @@ class BookManagement(ctk.CTkFrame):
         )
         add_btn.pack(side="right")
         
-        # Add category button
+        # Nút thêm thể loại
         add_cat_btn = ctk.CTkButton(
             header_frame,
             text="📁 Thêm thể loại",
@@ -61,7 +61,7 @@ class BookManagement(ctk.CTkFrame):
         )
         add_cat_btn.pack(side="right", padx=10)
         
-        # Search frame
+        # Khung tìm kiếm
         search_frame = ctk.CTkFrame(self, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=10)
         
@@ -73,7 +73,7 @@ class BookManagement(ctk.CTkFrame):
         self.search_entry.pack(side="left")
         self.search_entry.bind('<KeyRelease>', lambda e: self.filter_books())
         
-        # Category filter
+        # Bộ lọc thể loại
         ctk.CTkLabel(search_frame, text="Thể loại:").pack(side="left", padx=(15, 5))
         
         self.categories = get_all_categories()
@@ -89,7 +89,7 @@ class BookManagement(ctk.CTkFrame):
         )
         self.category_combo.pack(side="left")
         
-        # Book type filter
+        # Bộ lọc loại sách
         ctk.CTkLabel(search_frame, text="Loại:").pack(side="left", padx=(15, 5))
         
         self.book_type_var = ctk.StringVar(value="Tất cả")
@@ -102,7 +102,7 @@ class BookManagement(ctk.CTkFrame):
         )
         self.book_type_combo.pack(side="left")
         
-        # Status filter
+        # Bộ lọc trạng thái
         ctk.CTkLabel(search_frame, text="Trạng thái:").pack(side="left", padx=(15, 5))
         
         self.status_var = ctk.StringVar(value="Tất cả")
@@ -115,7 +115,7 @@ class BookManagement(ctk.CTkFrame):
         )
         self.status_combo.pack(side="left")
         
-        # Refresh button
+        # Nút làm mới
         refresh_btn = ctk.CTkButton(
             search_frame,
             text="🔄",
@@ -124,16 +124,16 @@ class BookManagement(ctk.CTkFrame):
         )
         refresh_btn.pack(side="left", padx=10)
         
-        # Table frame
+        # Khung bảng
         table_frame = ctk.CTkFrame(self)
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
-        # Treeview
+        # Bảng (Treeview)
         columns = ("ma_sach", "tieu_de", "tac_gia", "the_loai", "loai_sach", "so_luong", "trang_thai")
         
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=15)
         
-        # Column headings with sort
+        # Tiêu đề cột có sắp xếp
         headings = {
             "ma_sach": "Mã sách",
             "tieu_de": "Tiêu đề",
@@ -147,7 +147,7 @@ class BookManagement(ctk.CTkFrame):
             self.tree.heading(col, text=headings.get(col, col), 
                             command=lambda c=col: treeview_sort_column(self.tree, c, False))
         
-        # Column widths
+        # Độ rộng cột
         self.tree.column("ma_sach", width=70, anchor="center")
         self.tree.column("tieu_de", width=200)
         self.tree.column("tac_gia", width=150)
@@ -156,19 +156,19 @@ class BookManagement(ctk.CTkFrame):
         self.tree.column("so_luong", width=80, anchor="center")
         self.tree.column("trang_thai", width=100, anchor="center")
         
-        # Scrollbar
+        # Thanh cuộn
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Bind selection
+        # Gắn sự kiện chọn
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
         # Cho phép double-click: chọn dòng dưới con trỏ rồi mở dialog sửa
         self.tree.bind('<Double-1>', self.on_double_click)
         
-        # Action buttons
+        # Các nút hành động
         action_frame = ctk.CTkFrame(self, fg_color="transparent")
         action_frame.pack(fill="x", padx=20, pady=10)
         
@@ -213,7 +213,7 @@ class BookManagement(ctk.CTkFrame):
         )
         self.copies_btn.pack(side="left", padx=5)
         
-        # Pagination frame
+        # Khung phân trang
         self.pagination = PaginationFrame(
             self,
             total_items=0,
@@ -705,7 +705,7 @@ class BookDialog(ctk.CTkToplevel):
             )
             note_label.pack(fill="x", pady=(0, 10))
         
-        # Buttons - nằm ngoài scrollable frame, luôn ở cuối cửa sổ
+        # Khung nút - nằm ngoài scrollable frame, luôn ở cuối cửa sổ
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=(0, 15))
         
@@ -1035,7 +1035,7 @@ class BookCopiesDialog(ctk.CTkToplevel):
             'DANG_MUON': '📖 Đang mượn',
             'HONG': '⚠️ Hỏng',
             'MAT': '❌ Mất',
-            'KHONG_CO_SAN': '🚫 Không có sẵn'
+            'KHONG_CO_SAN': '⏳ Đặt trước'
         }
         
         for copy in copies:
@@ -1151,7 +1151,7 @@ class BookCopiesDialog(ctk.CTkToplevel):
             'DANG_MUON': 'Đang mượn',
             'HONG': 'Hỏng',
             'MAT': 'Mất',
-            'KHONG_CO_SAN': 'Không có sẵn'
+            'KHONG_CO_SAN': 'Đặt trước'
         }
         display_to_code = {v: k for k, v in code_to_display.items()}
 

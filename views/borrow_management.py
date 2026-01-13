@@ -1,5 +1,5 @@
 """
-Borrow Management - Quản lý mượn/trả sách
+Quản lý mượn/trả sách
 """
 import customtkinter as ctk
 from tkinter import messagebox, ttk
@@ -30,7 +30,7 @@ class BorrowManagement(ctk.CTkFrame):
         
     def create_widgets(self):
         """Tạo các widget"""
-        # Header
+        # Tiêu đề
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(fill="x", padx=20, pady=(20, 10))
         
@@ -41,7 +41,7 @@ class BorrowManagement(ctk.CTkFrame):
         )
         title.pack(side="left")
         
-        # Add borrow button
+        # Nút thêm phiếu mượn
         add_btn = ctk.CTkButton(
             header_frame,
             text="➕ Tạo phiếu mượn",
@@ -50,7 +50,7 @@ class BorrowManagement(ctk.CTkFrame):
         )
         add_btn.pack(side="right")
         
-        # Filter & Search frame
+        # Khung tìm kiếm & bộ lọc
         filter_frame = ctk.CTkFrame(self, fg_color="transparent")
         filter_frame.pack(fill="x", padx=20, pady=10)
         
@@ -62,7 +62,7 @@ class BorrowManagement(ctk.CTkFrame):
         self.search_entry.pack(side="left")
         self.search_entry.bind('<KeyRelease>', lambda e: self.search_borrows())
         
-        # Status filter
+        # Bộ lọc trạng thái
         ctk.CTkLabel(filter_frame, text="Trạng thái:").pack(side="left", padx=(20, 5))
         
         self.status_var = ctk.StringVar(value="Tất cả")
@@ -83,17 +83,17 @@ class BorrowManagement(ctk.CTkFrame):
         )
         refresh_btn.pack(side="left", padx=10)
         
-        # Table frame
+        # Khung bảng
         table_frame = ctk.CTkFrame(self)
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
-        # Treeview
+        # Bảng (Treeview)
         columns = ("ma_phieu", "ma_doc_gia", "ten_doc_gia", "tieu_de", 
                    "ngay_muon", "ngay_hen_tra", "ngay_tra_thuc", "trang_thai", "tien_phat")
         
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=12)
         
-        # Column headings with sorting
+        # Tiêu đề cột có sắp xếp
         headings = {
             "ma_phieu": "Mã phiếu",
             "ma_doc_gia": "Mã ĐG",
@@ -109,7 +109,7 @@ class BorrowManagement(ctk.CTkFrame):
             self.tree.heading(col, text=text, 
                             command=lambda c=col: treeview_sort_column(self.tree, c, False))
         
-        # Column widths
+        # Độ rộng cột
         self.tree.column("ma_phieu", width=70, anchor="center")
         self.tree.column("ma_doc_gia", width=70, anchor="center")
         self.tree.column("ten_doc_gia", width=130)
@@ -120,18 +120,18 @@ class BorrowManagement(ctk.CTkFrame):
         self.tree.column("trang_thai", width=100, anchor="center")
         self.tree.column("tien_phat", width=90, anchor="e")
         
-        # Scrollbar
+        # Thanh cuộn
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Bind selection
+        # Gắn sự kiện chọn
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
         self.tree.bind('<Double-1>', self.on_double_click)
         
-        # Action buttons
+        # Các nút hành động
         action_frame = ctk.CTkFrame(self, fg_color="transparent")
         action_frame.pack(fill="x", padx=20, pady=10)
         
@@ -173,7 +173,7 @@ class BorrowManagement(ctk.CTkFrame):
         )
         self.print_return_btn.pack(side="left", padx=5)
         
-        # Pagination frame
+        # Khung phân trang
         self.pagination = PaginationFrame(
             self,
             total_items=0,
@@ -188,7 +188,7 @@ class BorrowManagement(ctk.CTkFrame):
         
     def load_borrows(self):
         """Tải danh sách phiếu mượn"""
-        # Reset pagination
+        # Đặt lại phân trang
         total = count_borrows()
         self.pagination.set_total(total)
         self.pagination.current_page = 1

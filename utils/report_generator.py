@@ -1,5 +1,5 @@
 """
-Report Generator - Tạo báo cáo và hóa đơn bằng ReportLab
+Tạo báo cáo và hóa đơn bằng ReportLab
 """
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -34,7 +34,7 @@ def create_styles():
     """Tạo các style cho báo cáo"""
     styles = getSampleStyleSheet()
     
-    # Title style
+    # Style cho tiêu đề
     styles.add(ParagraphStyle(
         name='CustomTitle',
         fontName=FONT_BOLD,
@@ -43,7 +43,7 @@ def create_styles():
         spaceAfter=20
     ))
     
-    # Subtitle style
+    # Style cho tiêu đề phụ
     styles.add(ParagraphStyle(
         name='CustomSubtitle',
         fontName=FONT_NAME,
@@ -52,7 +52,7 @@ def create_styles():
         spaceAfter=10
     ))
     
-    # Normal style
+    # Style chuẩn
     styles.add(ParagraphStyle(
         name='CustomNormal',
         fontName=FONT_NAME,
@@ -61,7 +61,7 @@ def create_styles():
         spaceAfter=6
     ))
     
-    # Bold style
+    # Style chữ đậm
     styles.add(ParagraphStyle(
         name='CustomBold',
         fontName=FONT_BOLD,
@@ -164,7 +164,7 @@ def generate_borrow_receipt(borrow_data: dict, output_path: str = None) -> str:
     ]))
     elements.append(sig_table)
     
-    # Build PDF
+    # Tạo file PDF
     doc.build(elements)
     return output_path
 

@@ -1,5 +1,5 @@
 """
-Reader Management - Quản lý đọc giả
+Quản lý đọc giả
 """
 import customtkinter as ctk
 from tkinter import messagebox, ttk

@@ -2,10 +2,10 @@
 Phần mềm Quản lý Thư viện Số
 ============================
 - Python + CustomTkinter
-- SQLite Database
-- ReportLab PDF Export
+- Cơ sở dữ liệu SQLite
+- Xuất PDF bằng ReportLab
 
-Tác giả: Library Management System
+Tác giả: Hệ thống Quản lý Thư viện
 Ngày tạo: 2026
 """
 import sys

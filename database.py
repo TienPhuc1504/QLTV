@@ -690,7 +690,7 @@ def delete_book(ma_sach: int):
 
 
 # =====================================================
-# CÁC HÀM QUẢN LÝ QUYỂN SÁCH (Book Copies)
+# CÁC HÀM QUẢN LÝ QUYỂN SÁCH
 # =====================================================
 
 def get_book_copies(ma_sach: int):
@@ -1358,6 +1358,12 @@ def create_borrow(ma_nd_doc_gia: int, ma_nd_nhan_vien: int, ma_sach: int,
     ngay_muon = datetime.now()
     ngay_hen_tra = ngay_muon + timedelta(days=so_ngay_muon)
     
+    # Đảm bảo ma_nd_nhan_vien tồn tại trong bảng NHAN_VIEN để tránh lỗi FOREIGN KEY
+    cursor.execute("SELECT ma_nd FROM NHAN_VIEN WHERE ma_nd = ?", (ma_nd_nhan_vien,))
+    if not cursor.fetchone():
+        ma_nv_code = f"NV{ma_nd_nhan_vien:04d}"
+        cursor.execute("INSERT OR IGNORE INTO NHAN_VIEN (ma_nd, ma_nhan_vien) VALUES (?, ?)", (ma_nd_nhan_vien, ma_nv_code))
+
     cursor.execute("""
         INSERT INTO PHIEU_MUON_TRA 
         (ma_nd_doc_gia, ma_nd_nhan_vien, ma_sach, ma_quyen, ngay_muon, ngay_hen_tra, trang_thai_phieu)
@@ -1627,6 +1633,27 @@ def create_borrow_request(ma_nd_doc_gia: int, ma_sach: int, so_ngay_muon_de_xuat
     """, (ma_nd_doc_gia, ma_sach, ngay_yeu_cau, so_ngay_muon_de_xuat, ghi_chu))
     
     ma_yeu_cau = cursor.lastrowid
+    # Nếu là sách giấy, cố gắng "đặt trước" một quyển (đánh dấu KHONG_CO_SAN)
+    if sach['loai_sach'] == 'SACH_GIAY':
+        cursor.execute("""
+            SELECT ma_quyen FROM QUYEN_SACH 
+            WHERE ma_sach = ? AND trang_thai = 'CO_SAN'
+            ORDER BY ma_quyen LIMIT 1
+        """, (ma_sach,))
+        quyen = cursor.fetchone()
+        if quyen:
+            try:
+                # Đánh dấu quyển được đặt trước để tránh người khác mượn cùng lúc
+                cursor.execute("UPDATE QUYEN_SACH SET trang_thai = 'KHONG_CO_SAN' WHERE ma_quyen = ?", (quyen['ma_quyen'],))
+                # Ghi lại mã quyển vào yêu cầu để theo dõi (nếu cột tồn tại)
+                try:
+                    cursor.execute("UPDATE YEU_CAU_MUON SET ma_quyen = ? WHERE ma_yeu_cau = ?", (quyen['ma_quyen'], ma_yeu_cau))
+                except Exception:
+                    # Nếu cột ma_quyen không tồn tại, bỏ qua (migration khác)
+                    pass
+            except Exception:
+                # Nếu không thể đặt trước (race), bỏ qua và để nhân viên xử lý sau
+                pass
     
     # Lấy thông tin để tạo thông báo cho nhân viên
     cursor.execute("SELECT tieu_de FROM SACH WHERE ma_sach = ?", (ma_sach,))
@@ -1871,13 +1898,24 @@ def approve_borrow_request(ma_yeu_cau: int, ma_nd_xu_ly: int, so_ngay_muon: int)
     
     # Kiểm tra sách còn khả dụng không (cho sách giấy)
     if yeu_cau['loai_sach'] == 'SACH_GIAY':
-        cursor.execute("""
-            SELECT COUNT(*) as count FROM QUYEN_SACH 
-            WHERE ma_sach = ? AND trang_thai = 'CO_SAN'
-        """, (yeu_cau['ma_sach'],))
+        cursor.execute("SELECT COUNT(*) as count FROM QUYEN_SACH WHERE ma_sach = ? AND trang_thai = 'CO_SAN'", (yeu_cau['ma_sach'],))
         if cursor.fetchone()['count'] <= 0:
-            conn.close()
-            raise Exception("Sách đã hết!")
+            # Nếu không còn CO_SAN, nhưng yêu cầu này đã đặt trước một quyển, coi là hợp lệ
+            try:
+                if yeu_cau.get('ma_quyen'):
+                    cursor.execute("SELECT trang_thai FROM QUYEN_SACH WHERE ma_quyen = ?", (yeu_cau['ma_quyen'],))
+                    q = cursor.fetchone()
+                    if q and q['trang_thai'] in ('KHONG_CO_SAN', 'CO_SAN'):
+                        pass  # vẫn cho duyệt vì đã có quyển đặt trước
+                    else:
+                        conn.close()
+                        raise Exception("Sách đã hết!")
+                else:
+                    conn.close()
+                    raise Exception("Sách đã hết!")
+            except Exception:
+                conn.close()
+                raise
     
     # Cập nhật trạng thái yêu cầu sang CHO_LAY_SACH
     ngay_xu_ly = datetime.now().strftime('%Y-%m-%d')
@@ -2035,18 +2073,18 @@ def confirm_card_pickup(ma_yeu_cau: int, ma_nd_xu_ly: int):
         conn.close()
         raise Exception("Không tìm thấy yêu cầu in thẻ!")
 
-    # Must be printed before confirming pickup
+    # Phải in thẻ trước khi xác nhận lấy thẻ
     if yc['trang_thai'] != 'DA_IN':
         conn.close()
         raise Exception("Chỉ có thể xác nhận lấy thẻ khi thẻ đã được in!")
 
-    # If already marked as taken
+    # Nếu đã được đánh dấu là đã nhận
     try:
         if yc.get('da_nhan') and yc['da_nhan'] == 1:
             conn.close()
             raise Exception("Yêu cầu đã được xác nhận lấy trước đó.")
     except Exception:
-        # some sqlite Row may not support .get in older versions, fallback
+        # một số sqlite Row có thể không hỗ trợ .get trên các phiên bản cũ, dùng phương án thay thế
         pass
 
     ngay_xu_ly = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -2148,18 +2186,31 @@ def confirm_book_pickup(ma_yeu_cau: int, ma_nd_nhan_vien: int):
     
     # Kiểm tra và lấy quyển sách có sẵn (cho sách giấy)
     if yeu_cau['loai_sach'] == 'SACH_GIAY':
-        cursor.execute("""
-            SELECT ma_quyen FROM QUYEN_SACH 
-            WHERE ma_sach = ? AND trang_thai = 'CO_SAN'
-            ORDER BY ma_quyen LIMIT 1
-        """, (yeu_cau['ma_sach'],))
-        quyen = cursor.fetchone()
-        
-        if not quyen:
-            conn.close()
-            raise Exception("Sách đã hết!")
-        
-        ma_quyen = quyen['ma_quyen']
+        # Nếu trước đó đã đặt trước một quyển (ma_quyen trong yêu cầu), dùng nó
+        if yeu_cau.get('ma_quyen'):
+            cursor.execute("SELECT ma_quyen, trang_thai FROM QUYEN_SACH WHERE ma_quyen = ?", (yeu_cau['ma_quyen'],))
+            q = cursor.fetchone()
+            if not q:
+                conn.close()
+                raise Exception("Quyển sách đặt trước không tồn tại!")
+            # Nếu trạng thái không phải KHONG_CO_SAN hoặc CO_SAN, nghĩa là không thể lấy
+            if q['trang_thai'] not in ('KHONG_CO_SAN', 'CO_SAN'):
+                conn.close()
+                raise Exception("Quyển sách đã không còn sẵn để lấy.")
+            ma_quyen = q['ma_quyen']
+        else:
+            cursor.execute("""
+                SELECT ma_quyen FROM QUYEN_SACH 
+                WHERE ma_sach = ? AND trang_thai = 'CO_SAN'
+                ORDER BY ma_quyen LIMIT 1
+            """, (yeu_cau['ma_sach'],))
+            quyen = cursor.fetchone()
+            
+            if not quyen:
+                conn.close()
+                raise Exception("Sách đã hết!")
+            
+            ma_quyen = quyen['ma_quyen']
     
     # Cập nhật trạng thái yêu cầu sang DA_LAY
     cursor.execute("""
@@ -2195,6 +2246,12 @@ def confirm_book_pickup(ma_yeu_cau: int, ma_nd_nhan_vien: int):
     ngay_muon = datetime.now()
     ngay_hen_tra = ngay_muon + timedelta(days=so_ngay_muon)
     
+    # Đảm bảo ma_nd_nhan_vien tồn tại trong bảng NHAN_VIEN để tránh lỗi FOREIGN KEY
+    cursor.execute("SELECT ma_nd FROM NHAN_VIEN WHERE ma_nd = ?", (ma_nd_nhan_vien,))
+    if not cursor.fetchone():
+        ma_nv_code = f"NV{ma_nd_nhan_vien:04d}"
+        cursor.execute("INSERT OR IGNORE INTO NHAN_VIEN (ma_nd, ma_nhan_vien) VALUES (?, ?)", (ma_nd_nhan_vien, ma_nv_code))
+
     cursor.execute("""
         INSERT INTO PHIEU_MUON_TRA 
         (ma_nd_doc_gia, ma_nd_nhan_vien, ma_sach, ma_quyen, ngay_muon, ngay_hen_tra, trang_thai_phieu)
@@ -2206,9 +2263,7 @@ def confirm_book_pickup(ma_yeu_cau: int, ma_nd_nhan_vien: int):
     
     # Cập nhật trạng thái quyển sách
     if ma_quyen:
-        cursor.execute("""
-            UPDATE QUYEN_SACH SET trang_thai = 'DANG_MUON' WHERE ma_quyen = ?
-        """, (ma_quyen,))
+        cursor.execute("UPDATE QUYEN_SACH SET trang_thai = 'DANG_MUON' WHERE ma_quyen = ?", (ma_quyen,))
     
     conn.commit()
     conn.close()
@@ -2266,6 +2321,14 @@ def reject_borrow_request(ma_yeu_cau: int, ma_nd_xu_ly: int, ly_do: str = None):
         datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         f"yeu_cau:{ma_yeu_cau}"
     ))
+    # Nếu trước đó đã đặt trước một quyển, trả lại trạng thái CO_SAN cho quyển đó
+    try:
+        cursor.execute("SELECT ma_quyen FROM YEU_CAU_MUON WHERE ma_yeu_cau = ?", (ma_yeu_cau,))
+        row = cursor.fetchone()
+        if row and row['ma_quyen']:
+            cursor.execute("UPDATE QUYEN_SACH SET trang_thai = 'CO_SAN' WHERE ma_quyen = ?", (row['ma_quyen'],))
+    except Exception:
+        pass
     
     conn.commit()
     conn.close()
@@ -2296,6 +2359,14 @@ def cancel_borrow_request(ma_yeu_cau: int, ma_nd_doc_gia: int):
     cursor.execute("""
         UPDATE YEU_CAU_MUON SET trang_thai = 'DA_HUY' WHERE ma_yeu_cau = ?
     """, (ma_yeu_cau,))
+    # Nếu trước đó đã đặt trước một quyển, trả lại trạng thái CO_SAN cho quyển đó
+    try:
+        cursor.execute("SELECT ma_quyen FROM YEU_CAU_MUON WHERE ma_yeu_cau = ?", (ma_yeu_cau,))
+        row = cursor.fetchone()
+        if row and row['ma_quyen']:
+            cursor.execute("UPDATE QUYEN_SACH SET trang_thai = 'CO_SAN' WHERE ma_quyen = ?", (row['ma_quyen'],))
+    except Exception:
+        pass
     
     conn.commit()
     conn.close()

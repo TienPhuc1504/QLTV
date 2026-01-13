@@ -1,5 +1,5 @@
 """
-My Borrows - Quản lý sách đã mượn và lịch sử (dành cho đọc giả)
+Quản lý sách đã mượn và lịch sử (dành cho đọc giả)
 """
 import customtkinter as ctk
 from tkinter import messagebox, ttk

@@ -1,5 +1,5 @@
 """
-My Requests - Xem yêu cầu mượn sách của đọc giả
+Xem yêu cầu mượn sách của đọc giả
 """
 import customtkinter as ctk
 from tkinter import messagebox, ttk

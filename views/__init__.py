@@ -1,1 +1,1 @@
-# Views package
+# Gói views

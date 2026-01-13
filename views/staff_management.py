@@ -1,5 +1,5 @@
 """
-Staff Management - Quản lý nhân viên (chỉ Admin)
+Quản lý nhân viên (chỉ Admin)
 """
 import customtkinter as ctk
 from tkinter import messagebox, ttk
@@ -27,7 +27,7 @@ class StaffManagement(ctk.CTkFrame):
         
     def create_widgets(self):
         """Tạo các widget"""
-        # Header
+        # Tiêu đề
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(fill="x", padx=20, pady=(20, 10))
         
@@ -38,7 +38,7 @@ class StaffManagement(ctk.CTkFrame):
         )
         title.pack(side="left")
         
-        # Add button
+        # Nút thêm
         add_btn = ctk.CTkButton(
             header_frame,
             text="➕ Thêm nhân viên",
@@ -47,7 +47,7 @@ class StaffManagement(ctk.CTkFrame):
         )
         add_btn.pack(side="right")
         
-        # Search frame
+        # Khung tìm kiếm
         search_frame = ctk.CTkFrame(self, fg_color="transparent")
         search_frame.pack(fill="x", padx=20, pady=10)
         
@@ -67,16 +67,16 @@ class StaffManagement(ctk.CTkFrame):
         )
         refresh_btn.pack(side="left", padx=10)
         
-        # Table frame
+        # Khung bảng
         table_frame = ctk.CTkFrame(self)
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
-        # Treeview
+        # Bảng (Treeview)
         columns = ("ma_nhan_vien", "ho_ten", "so_dt", "email", "dia_chi")
         
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=12)
         
-        # Column headings with sorting
+        # Tiêu đề cột có sắp xếp
         headings = {
             "ma_nhan_vien": "Mã NV",
             "ho_ten": "Họ tên",
@@ -88,25 +88,25 @@ class StaffManagement(ctk.CTkFrame):
             self.tree.heading(col, text=text, 
                             command=lambda c=col: treeview_sort_column(self.tree, c, False))
         
-        # Column widths
+        # Độ rộng cột
         self.tree.column("ma_nhan_vien", width=100, anchor="center")
         self.tree.column("ho_ten", width=200)
         self.tree.column("so_dt", width=130, anchor="center")
         self.tree.column("email", width=220)
         self.tree.column("dia_chi", width=200)
         
-        # Scrollbar
+        # Thanh cuộn
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Bind selection
+        # Gắn sự kiện chọn
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
         self.tree.bind('<Double-1>', self.on_double_click)
         
-        # Action buttons
+        # Các nút hành động
         action_frame = ctk.CTkFrame(self, fg_color="transparent")
         action_frame.pack(fill="x", padx=20, pady=10)
         
@@ -130,7 +130,7 @@ class StaffManagement(ctk.CTkFrame):
         )
         self.delete_btn.pack(side="left", padx=5)
         
-        # Note
+        # Ghi chú
         note_label = ctk.CTkLabel(
             action_frame,
             text="💡 Tài khoản mặc định: mã nhân viên/mã nhân viên",
@@ -271,7 +271,7 @@ class StaffDialog(ctk.CTkToplevel):
             
     def create_widgets(self):
         """Tạo các widget"""
-        # Main container + scrollable content so dialog can scroll when needed
+        # Khung chính + nội dung có cuộn để dialog có thể cuộn khi cần
         main_container = ctk.CTkFrame(self, fg_color="transparent")
         main_container.pack(fill="both", expand=True, padx=12, pady=12)
 
@@ -279,7 +279,7 @@ class StaffDialog(ctk.CTkToplevel):
         content.pack(fill="both", expand=True, pady=(0, 10))
 
         # Mã nhân viên sẽ được tự động sinh khi thêm mới
-        # (nên không hiện trường nhập mã)
+        # (nên không hiển trường nhập mã)
         # Họ tên
         ctk.CTkLabel(content, text="Họ tên: *", anchor="w").pack(fill="x", pady=(0, 5))
         self.name_entry = ctk.CTkEntry(content)
@@ -300,7 +300,7 @@ class StaffDialog(ctk.CTkToplevel):
         self.email_entry = ctk.CTkEntry(content)
         self.email_entry.pack(fill="x", pady=(0, 10))
         
-        # Fixed buttons at bottom
+        # Các nút cố định ở dưới
         btn_frame = ctk.CTkFrame(main_container, fg_color="transparent")
         btn_frame.pack(fill="x", side="bottom")
         ctk.CTkButton(btn_frame, text="Hủy", command=self.destroy, fg_color="gray", width=100).pack(side="left", padx=12, pady=10)

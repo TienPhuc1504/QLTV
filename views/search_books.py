@@ -1,5 +1,5 @@
 """
-Search Books - Tìm và mượn sách (dành cho đọc giả) - Giao diện trực quan
+Tìm và mượn sách (dành cho đọc giả)
 """
 import customtkinter as ctk
 from tkinter import messagebox, ttk
@@ -539,11 +539,22 @@ class SearchBooks(ctk.CTkFrame):
                 continue
             
             # Lọc theo trạng thái
-            is_available = book['so_luong'] > 0
+            # Xác định có phải sách online không và số bản có sẵn (dành cho sách giấy)
+            is_online = book.get('loai_sach') == 'SACH_ONLINE'
+            if is_online:
+                is_available = True
+            else:
+                is_available = book.get('so_quyen_co_san', book.get('so_luong', 0)) > 0
+
+            # Nếu filter là "Có sẵn" thì chỉ giữ những sách khả dụng
             if "Có sẵn" in status_filter and not is_available:
                 continue
-            elif "Hết" in status_filter and is_available:
-                continue
+            # Nếu filter là "Hết sách" thì chỉ giữ sách GIẤY và KHÔNG còn bản nào
+            elif "Hết" in status_filter:
+                if is_online:
+                    continue
+                if is_available:
+                    continue
             
             filtered_books.append(book)
         

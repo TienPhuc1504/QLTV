@@ -1,5 +1,5 @@
 """
-Notifications View - Giao diện thông báo
+Giao diện thông báo
 """
 import customtkinter as ctk
 from tkinter import messagebox
@@ -32,7 +32,7 @@ class NotificationsView(ctk.CTkFrame):
         
     def create_widgets(self):
         """Tạo các widget"""
-        # Header
+        # Tiêu đề
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(fill="x", padx=20, pady=(20, 10))
         
@@ -43,7 +43,7 @@ class NotificationsView(ctk.CTkFrame):
         )
         title.pack(side="left")
         
-        # Action buttons
+        # Các nút hành động
         btn_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
         btn_frame.pack(side="right")
         
@@ -63,7 +63,7 @@ class NotificationsView(ctk.CTkFrame):
             width=100
         ).pack(side="left", padx=5)
         
-        # Filter frame
+        # Khung bộ lọc
         filter_frame = ctk.CTkFrame(self, fg_color="transparent")
         filter_frame.pack(fill="x", padx=20, pady=10)
         
@@ -79,7 +79,7 @@ class NotificationsView(ctk.CTkFrame):
         )
         filter_combo.pack(side="left")
         
-        # Unread count label
+        # Nhãn đếm chưa đọc
         self.unread_label = ctk.CTkLabel(
             filter_frame,
             text="",
@@ -88,11 +88,11 @@ class NotificationsView(ctk.CTkFrame):
         )
         self.unread_label.pack(side="left", padx=20)
         
-        # Notifications list container
+        # Khung danh sách thông báo
         self.list_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.list_container.pack(fill="both", expand=True, padx=20, pady=10)
         
-        # Empty state label
+        # Nhãn trạng thái rỗng
         self.empty_label = ctk.CTkLabel(
             self.list_container,
             text="📭 Không có thông báo nào",
@@ -102,22 +102,22 @@ class NotificationsView(ctk.CTkFrame):
         
     def load_notifications(self):
         """Tải danh sách thông báo"""
-        # Clear current notifications
+        # Xóa thông báo hiện tại
         for widget in self.list_container.winfo_children():
             widget.destroy()
             
-        # Get filter
+        # Lấy bộ lọc
         filter_val = self.filter_var.get()
         unread_only = filter_val == "Chưa đọc"
         
-        # Get notifications
+        # Lấy thông báo
         notifications = get_notifications(self.user['ma_nd'], limit=50, unread_only=unread_only)
         
-        # Filter for read only
+        # Lọc chỉ các thông báo đã đọc
         if filter_val == "Đã đọc":
             notifications = [n for n in notifications if n['da_doc'] == 1]
         
-        # Update unread count
+        # Cập nhật số lượng chưa đọc
         unread_count = get_unread_notification_count(self.user['ma_nd'])
         if unread_count > 0:
             self.unread_label.configure(text=f"🔴 {unread_count} thông báo chưa đọc")
@@ -134,20 +134,20 @@ class NotificationsView(ctk.CTkFrame):
             self.empty_label.pack(pady=50)
             return
             
-        # Render notifications
+        # Vẽ thông báo
         for notif in notifications:
             self.create_notification_card(notif)
             
     def create_notification_card(self, notif: dict):
         """Tạo card hiển thị thông báo"""
-        # Determine colors based on type and read status
+        # Xác định màu theo loại và trạng thái đọc
         type_colors = {
-            'YEU_CAU_DUYET': '#28a745',      # Green - approved
-            'YEU_CAU_TU_CHOI': '#dc3545',    # Red - rejected
-            'SAP_HET_HAN': '#ffc107',         # Yellow - warning
-            'QUA_HAN': '#dc3545',             # Red - overdue
-            'SACH_CO_SAN': '#17a2b8',         # Blue - info
-            'HE_THONG': '#6c757d'             # Gray - system
+            'YEU_CAU_DUYET': '#28a745',      # Xanh lá - đã duyệt
+            'YEU_CAU_TU_CHOI': '#dc3545',    # Đỏ - bị từ chối
+            'SAP_HET_HAN': '#ffc107',         # Vàng - cảnh báo
+            'QUA_HAN': '#dc3545',             # Đỏ - quá hạn
+            'SACH_CO_SAN': '#17a2b8',         # Xanh dương - thông tin
+            'HE_THONG': '#6c757d'             # Xám - hệ thống
         }
         
         type_icons = {
@@ -162,7 +162,7 @@ class NotificationsView(ctk.CTkFrame):
         bg_color = "#2b2b2b" if notif['da_doc'] else "#1a472a"
         border_color = type_colors.get(notif['loai_thong_bao'], '#6c757d')
         
-        # Card frame
+        # Khung thẻ
         card = ctk.CTkFrame(
             self.list_container,
             fg_color=bg_color,
@@ -172,15 +172,15 @@ class NotificationsView(ctk.CTkFrame):
         )
         card.pack(fill="x", pady=5, padx=5)
         
-        # Content frame
+        # Khung nội dung
         content_frame = ctk.CTkFrame(card, fg_color="transparent")
         content_frame.pack(fill="x", padx=15, pady=10)
         
-        # Header row
+        # Hàng tiêu đề
         header_row = ctk.CTkFrame(content_frame, fg_color="transparent")
         header_row.pack(fill="x")
         
-        # Icon and title
+        # Biểu tượng và tiêu đề
         icon = type_icons.get(notif['loai_thong_bao'], '🔔')
         title_text = f"{icon} {notif['tieu_de']}"
         
@@ -192,7 +192,7 @@ class NotificationsView(ctk.CTkFrame):
         )
         title_label.pack(side="left", fill="x", expand=True)
         
-        # Unread indicator
+        # Chỉ báo chưa đọc
         if not notif['da_doc']:
             unread_badge = ctk.CTkLabel(
                 header_row,
@@ -202,7 +202,7 @@ class NotificationsView(ctk.CTkFrame):
             )
             unread_badge.pack(side="right", padx=5)
         
-        # Time
+        # Thời gian
         try:
             ngay_tao = datetime.strptime(notif['ngay_tao'], '%Y-%m-%d %H:%M:%S')
             time_ago = self.get_time_ago(ngay_tao)
@@ -217,7 +217,7 @@ class NotificationsView(ctk.CTkFrame):
         )
         time_label.pack(side="right")
         
-        # Content
+        # Nội dung
         content_label = ctk.CTkLabel(
             content_frame,
             text=notif['noi_dung'],
@@ -228,7 +228,7 @@ class NotificationsView(ctk.CTkFrame):
         )
         content_label.pack(fill="x", pady=(5, 0))
         
-        # Action buttons
+        # Các nút hành động
         action_row = ctk.CTkFrame(content_frame, fg_color="transparent")
         action_row.pack(fill="x", pady=(10, 0))
         
@@ -325,7 +325,7 @@ class NotificationBell(ctk.CTkFrame):
         )
         self.bell_btn.pack()
         
-        # Badge
+        # Nhãn (badge)
         self.badge = ctk.CTkLabel(
             self,
             text="",
