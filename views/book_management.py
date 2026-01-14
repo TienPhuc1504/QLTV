@@ -1169,13 +1169,24 @@ class BookCopiesDialog(ctk.CTkToplevel):
             ctk.CTkLabel(frame, text="⚠️ Không thể đổi trạng thái khi đang mượn",
                         text_color="orange", font=ctk.CTkFont(size=11)).pack(pady=5)
         else:
-            # Chỉ cho chọn (không cho nhập) bằng chế độ readonly
-            status_combo = ctk.CTkComboBox(
-                frame,
-                values=[code_to_display['CO_SAN'], code_to_display['KHONG_CO_SAN'], code_to_display['HONG'], code_to_display['MAT']],
-                variable=status_var,
-                state="readonly"
-            )
+            # Nếu quyển đang được đặt trước (KHONG_CO_SAN), không cho nhân viên thay đổi trạng thái
+            if copy['trang_thai'] == 'KHONG_CO_SAN':
+                status_combo = ctk.CTkComboBox(
+                    frame,
+                    values=[code_to_display['KHONG_CO_SAN']],
+                    variable=status_var,
+                    state="disabled"
+                )
+                ctk.CTkLabel(frame, text="⚠️ Trạng thái 'Đặt trước' là trạng thái ẩn và chỉ thay đổi khi đọc giả gửi yêu cầu/huỷ yêu cầu.",
+                            text_color="orange", font=ctk.CTkFont(size=11)).pack(pady=5)
+            else:
+                # Không hiển thị lựa chọn 'Đặt trước' trong danh sách để nhân viên không đặt thủ công
+                status_combo = ctk.CTkComboBox(
+                    frame,
+                    values=[code_to_display['CO_SAN'], code_to_display['HONG'], code_to_display['MAT']],
+                    variable=status_var,
+                    state="readonly"
+                )
         status_combo.pack(fill="x", pady=(0, 10))
         
         ctk.CTkLabel(frame, text="Vị trí:", anchor="w").pack(fill="x", pady=(0, 5))
@@ -1191,7 +1202,11 @@ class BookCopiesDialog(ctk.CTkToplevel):
         def save():
             # Map hiển thị về mã trạng thái trước khi lưu
             selected_display = status_var.get()
-            trang_thai_code = display_to_code.get(selected_display, selected_display)
+            # Nếu quyển đang ở 'KHONG_CO_SAN' thì không cho thay đổi trạng thái từ UI
+            if copy['trang_thai'] == 'KHONG_CO_SAN':
+                trang_thai_code = 'KHONG_CO_SAN'
+            else:
+                trang_thai_code = display_to_code.get(selected_display, selected_display)
 
             update_book_copy(
                 int(self.selected_copy),

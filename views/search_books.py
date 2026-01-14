@@ -1178,6 +1178,12 @@ class SearchBooks(ctk.CTkFrame):
             messagebox.showerror("Lỗi", "Không tìm thấy thông tin sách!")
             return
         
+        # Kiểm tra khả dụng: ưu tiên so_quyen_co_san, fallback so_luong
+        available = book.get('so_quyen_co_san', book.get('so_luong', 0))
+        if book.get('loai_sach') == 'SACH_GIAY' and (available is None or available <= 0):
+            messagebox.showwarning("Cảnh báo", "Sách hiện đã hết. Không thể gửi yêu cầu mượn.")
+            return
+        
         # Kiểm tra thẻ đọc giả
         reader = get_reader_by_id(self.user['ma_nd'])
         if not reader:

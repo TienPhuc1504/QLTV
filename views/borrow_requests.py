@@ -30,7 +30,7 @@ class BorrowRequestsView(ctk.CTkFrame):
         
     def create_widgets(self):
         """Tạo các widget"""
-        # Tiêu đề
+        # Header
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(fill="x", padx=20, pady=(20, 10))
         
@@ -41,7 +41,7 @@ class BorrowRequestsView(ctk.CTkFrame):
         )
         title.pack(side="left")
         
-        # Đếm chờ xử lý
+        # Pending count
         self.pending_label = ctk.CTkLabel(
             header_frame,
             text="",
@@ -57,7 +57,7 @@ class BorrowRequestsView(ctk.CTkFrame):
             width=100
         ).pack(side="right")
         
-        # Khung bộ lọc
+        # Filter frame
         filter_frame = ctk.CTkFrame(self, fg_color="transparent")
         filter_frame.pack(fill="x", padx=20, pady=10)
         
@@ -83,7 +83,7 @@ class BorrowRequestsView(ctk.CTkFrame):
         )
         status_combo.pack(side="left")
         
-        # Danh sách yêu cầu
+        # Request list
         table_frame = ctk.CTkFrame(self)
         table_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
@@ -226,17 +226,14 @@ class BorrowRequestsView(ctk.CTkFrame):
                 'CHO_LAY_SACH': '📦 Chờ lấy sách',
                 'DA_LAY': '✅ Đã lấy',
                 'TU_CHOI': '❌ Từ chối',
-                'DA_HUY': '🚫 Đã hủy',
-                # Trạng thái cho yêu cầu in/cấp thẻ (tiếng Việt, có dấu, không có gạch ngang)
-                'DANG_XU_LY': '⏳ Chờ xử lý',
-                'DA_IN': '✅ Đã in'
+                'DA_HUY': '🚫 Đã hủy'
             }
             
             ghi_chu = req['ghi_chu'] or ''
             if len(ghi_chu) > 30:
                 ghi_chu = ghi_chu[:30] + '...'
             
-            # Tiền tố iid bằng loại để tránh trùng id giữa các bảng
+            # Prefix the iid with type to avoid id collision between tables
             iid_prefix = 'MUON' if req.get('loai_yeu_cau') == 'MUON' else 'THE'
             iid = f"{iid_prefix}:{req['ma_yeu_cau']}"
             ngay_display = req.get('ngay_yeu_cau')
@@ -263,7 +260,7 @@ class BorrowRequestsView(ctk.CTkFrame):
         selection = self.request_tree.selection()
         if selection:
             raw = selection[0]
-            # Định dạng iid: LOAI:id
+            # iid format: TYPE:id
             try:
                 typ, id_str = raw.split(':', 1)
                 self.selected_request = {'type': typ, 'id': int(id_str)}
@@ -296,7 +293,7 @@ class BorrowRequestsView(ctk.CTkFrame):
                     self.reject_btn.configure(state="normal")
                     self.pickup_btn.configure(state="disabled")
                 elif "Đang xử lý" in str(trang_thai):
-                        # tái sử dụng pickup_btn như hành động 'Đánh dấu đã in' qua view_detail hoặc luồng trực tiếp
+                    # reuse pickup_btn as 'Đánh dấu đã in' action via view_detail or direct flow
                     self.approve_btn.configure(state="disabled")
                     self.reject_btn.configure(state="normal")
                     self.pickup_btn.configure(state="disabled")
@@ -317,13 +314,13 @@ class BorrowRequestsView(ctk.CTkFrame):
         try:
             item = self.request_tree.identify_row(event.y)
             if item:
-                # đặt selection về hàng được click
+                # set selection to the clicked row
                 self.request_tree.selection_set(item)
-                # gọi hàm xử lý selection để cập nhật trạng thái nút
+                # trigger selection handler to update buttons
                 self.on_request_select(None)
                 self.view_detail()
         except Exception:
-            # Dự phòng: thử mở chi tiết nếu có selection
+            # Fallback: try to open detail if any selection exists
             if self.request_tree.selection():
                 self.view_detail()
             
@@ -337,7 +334,7 @@ class BorrowRequestsView(ctk.CTkFrame):
         else:
             sel_id = self.selected_request
 
-        # Nếu là yêu cầu thẻ, gọi approve_card_request trực tiếp (xác nhận với người dùng)
+        # If this is a card request, call approve_card_request directly (confirm with user)
         if isinstance(self.selected_request, dict) and self.selected_request.get('type') == 'THE':
             if not messagebox.askyesno("Bắt đầu xử lý", "Chuyển yêu cầu in thẻ sang trạng thái 'Đang xử lý' ?"):
                 return
@@ -369,7 +366,7 @@ class BorrowRequestsView(ctk.CTkFrame):
         frame = ctk.CTkFrame(dialog, fg_color="transparent")
         frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        # Thông tin
+        # Info
         ctk.CTkLabel(
             frame,
             text=f"📖 {req['tieu_de']}",
@@ -416,7 +413,7 @@ class BorrowRequestsView(ctk.CTkFrame):
         
         ctk.CTkLabel(days_frame, text="ngày", text_color="gray").pack(side="left", padx=10)
         
-        # Nút
+        # Buttons
         btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
         btn_frame.pack(fill="x", pady=20)
         
@@ -424,7 +421,7 @@ class BorrowRequestsView(ctk.CTkFrame):
         approve_btn = ctk.CTkButton(
             btn_frame, 
             text="✅ Duyệt", 
-            command=lambda: None,  # Sẽ đặt lệnh (command) sau
+            command=lambda: None,  # Sẽ set command sau
             fg_color="#28a745",
             hover_color="#218838",
             width=100
@@ -468,7 +465,7 @@ class BorrowRequestsView(ctk.CTkFrame):
                 messagebox.showerror("Lỗi", str(e))
                 approve_btn.configure(state="normal", text="✅ Duyệt")
         
-        # Đặt lệnh cho nút duyệt
+        # Set command cho approve button
         approve_btn.configure(command=approve)
         
         ctk.CTkButton(
@@ -548,7 +545,7 @@ class BorrowRequestsView(ctk.CTkFrame):
             sel_id = self.selected_request
             sel_type = 'MUON'
 
-        # Nếu là yêu cầu thẻ, hiển thị dialog nhập lý do và gọi reject_card_request
+        # If card request, show reason dialog and call reject_card_request
         if sel_type == 'THE':
             rdlg = ctk.CTkToplevel(self)
             rdlg.title("Từ chối yêu cầu in thẻ")
@@ -628,7 +625,7 @@ class BorrowRequestsView(ctk.CTkFrame):
                 messagebox.showerror("Lỗi", str(e))
                 reject_btn.configure(state="normal", text="❌ Từ chối")
         
-        # Gán lệnh
+        # Set command
         reject_btn.configure(command=reject)
         
         ctk.CTkButton(
@@ -768,7 +765,7 @@ class BorrowRequestsView(ctk.CTkFrame):
                 ctk.CTkLabel(frame, text=req['ly_do_tu_choi'], wraplength=450, 
                             text_color="#dc3545", anchor="w").pack(fill="x")
 
-            # Khung nút - cố định ở cuối dialog
+            # Buttons frame - cố định ở cuối dialog
             btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
             btn_frame.pack(fill="x", padx=20, pady=15)
 
@@ -844,7 +841,7 @@ class BorrowRequestsView(ctk.CTkFrame):
 
         status_display = {
             'CHO_DUYET': '⏳ Chờ duyệt',
-            'DANG_XU_LY': '⏳ Chờ xử lý',
+            'DANG_XU_LY': '� Đang xử lý',
             'DA_IN': '✅ Đã in',
             'TU_CHOI': '❌ Từ chối',
             'DA_HUY': '🚫 Đã hủy'
@@ -872,7 +869,7 @@ class BorrowRequestsView(ctk.CTkFrame):
             ctk.CTkLabel(frame, text="Lý do từ chối:", font=ctk.CTkFont(weight="bold"), text_color="#dc3545", anchor="w").pack(fill="x", pady=(10, 2))
             ctk.CTkLabel(frame, text=req.get('ly_do_tu_choi'), wraplength=380, text_color="#dc3545", anchor="w").pack(fill="x")
 
-        # Nút cho yêu cầu in thẻ
+        # Buttons for card requests
         btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=12)
 
@@ -932,7 +929,7 @@ class BorrowRequestsView(ctk.CTkFrame):
             ctk.CTkButton(btn_frame, text="❌ Từ chối", command=do_reject_card, fg_color="#dc3545", width=120).pack(side="right", padx=5)
             ctk.CTkButton(btn_frame, text="✅ Đã in", command=mark_printed_action, fg_color="#17a2b8", width=120).pack(side="right", padx=5)
         elif state == 'DA_IN':
-            # Nếu đã in nhưng chưa nhận, hiển thị nút xác nhận đã lấy
+            # If printed but not yet picked up, show confirmation button
             if not req.get('da_nhan'):
                 def confirm_pickup_card():
                     try:

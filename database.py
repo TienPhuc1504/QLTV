@@ -1241,6 +1241,18 @@ def get_all_borrows(search_term: str = "", status: str = None, limit: int = None
         
         cursor.execute(query, params)
         borrows = [dict(row) for row in cursor.fetchall()]
+        # Nếu phiếu đang mượn và quá hạn, tính tiền phạt tạm thời để hiển thị
+        try:
+            for b in borrows:
+                if b.get('trang_thai_phieu') == 'DANG_MUON':
+                    b['tien_phat'] = calculate_fine(b.get('ma_phieu'))
+                else:
+                    # đảm bảo có giá trị số
+                    b['tien_phat'] = b.get('tien_phat') or 0
+        except Exception:
+            # Nếu có lỗi khi tính phạt, bỏ qua và trả dữ liệu hiện tại
+            pass
+
         return borrows
     except Exception as e:
         raise Exception(f"Lỗi khi lấy danh sách phiếu mượn: {str(e)}")
@@ -1306,7 +1318,20 @@ def get_borrow_by_id(ma_phieu: int):
     
     borrow = cursor.fetchone()
     conn.close()
-    return dict(borrow) if borrow else None
+    if not borrow:
+        return None
+
+    borrow_dict = dict(borrow)
+    # Nếu phiếu vẫn đang mượn, tính tiền phạt hiện tại để hiển thị
+    try:
+        if borrow_dict.get('trang_thai_phieu') == 'DANG_MUON':
+            borrow_dict['tien_phat'] = calculate_fine(ma_phieu)
+        else:
+            borrow_dict['tien_phat'] = borrow_dict.get('tien_phat') or 0
+    except Exception:
+        borrow_dict['tien_phat'] = borrow_dict.get('tien_phat') or 0
+
+    return borrow_dict
 
 
 def create_borrow(ma_nd_doc_gia: int, ma_nd_nhan_vien: int, ma_sach: int, 
@@ -1604,12 +1629,13 @@ def create_borrow_request(ma_nd_doc_gia: int, ma_sach: int, so_ngay_muon_de_xuat
     
     # Kiểm tra sách có khả dụng không
     cursor.execute("""
-        SELECT s.trang_thai_sach, s.loai_sach, sg.so_luong
+        SELECT s.trang_thai_sach, s.loai_sach, sg.so_luong,
+               (SELECT COUNT(*) FROM QUYEN_SACH q WHERE q.ma_sach = s.ma_sach AND q.trang_thai = 'CO_SAN') as so_quyen_co_san
         FROM SACH s
         LEFT JOIN SACH_GIAY sg ON s.ma_sach = sg.ma_sach
         WHERE s.ma_sach = ?
     """, (ma_sach,))
-    
+
     sach = cursor.fetchone()
     if not sach:
         conn.close()
@@ -1620,7 +1646,20 @@ def create_borrow_request(ma_nd_doc_gia: int, ma_sach: int, so_ngay_muon_de_xuat
         raise Exception("Sách không khả dụng (hỏng hoặc mất)!")
     
     if sach['loai_sach'] == 'SACH_GIAY':
-        if sach['so_luong'] is None or sach['so_luong'] <= 0:
+        # Prefer checking actual available copies (`so_quyen_co_san`) if present,
+        # otherwise fall back to legacy `so_luong` column.
+        try:
+            keys = sach.keys()
+        except Exception:
+            keys = []
+
+        if 'so_quyen_co_san' in keys:
+            available = sach['so_quyen_co_san']
+        else:
+            # safe fallback to sg.so_luong alias
+            available = sach['so_luong'] if 'so_luong' in keys else 0
+
+        if available is None or available <= 0:
             conn.close()
             raise Exception("Sách đã hết! Vui lòng chọn sách khác.")
     
@@ -1888,6 +1927,7 @@ def approve_borrow_request(ma_yeu_cau: int, ma_nd_xu_ly: int, so_ngay_muon: int)
     """, (ma_yeu_cau,))
     
     yeu_cau = cursor.fetchone()
+    yeu_cau = dict(yeu_cau) if yeu_cau else None
     if not yeu_cau:
         conn.close()
         raise Exception("Không tìm thấy yêu cầu!")
@@ -2174,6 +2214,7 @@ def confirm_book_pickup(ma_yeu_cau: int, ma_nd_nhan_vien: int):
     """, (ma_yeu_cau,))
     
     yeu_cau = cursor.fetchone()
+    yeu_cau = dict(yeu_cau) if yeu_cau else None
     if not yeu_cau:
         conn.close()
         raise Exception("Không tìm thấy yêu cầu!")

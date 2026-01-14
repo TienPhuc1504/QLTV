@@ -19,8 +19,6 @@ class MainView(ctk.CTkToplevel):
     ACTIVE_COLOR = "#1f538d"  # Màu khi active
     INACTIVE_COLOR = "transparent"  # Màu khi không active
     
-    # Thời gian chờ phiên (30 phút = 1800000 ms)
-    SESSION_TIMEOUT = 30 * 60 * 1000
     
     def __init__(self, parent, user: dict):
         super().__init__(parent)
@@ -30,7 +28,6 @@ class MainView(ctk.CTkToplevel):
         self.current_frame = None
         self.menu_buttons = []  # Danh sách các menu button
         self.active_button = None  # Button đang active
-        self.session_timer_id = None  # ID của session timer
         
         # Cấu hình cửa sổ
         self.title(f"Quản lý Thư viện - {user['ho_ten']} ({user['loai_nguoi_dung']})")
@@ -52,13 +49,7 @@ class MainView(ctk.CTkToplevel):
         # Bắt đầu kiểm tra thông báo định kỳ
         self.start_notification_checker()
         
-        # Bắt đầu tính thời gian chờ phiên
-        self.start_session_timer()
-        
-        # Gắn các sự kiện để reset bộ đếm phiên
-        self.bind_all("<Button>", self.reset_session_timer)
-        self.bind_all("<Key>", self.reset_session_timer)
-        self.bind_all("<Motion>", self.reset_session_timer)
+        # (Phiên không có timeout — bỏ bắt/đặt timer phiên)
         
         # Hiển thị dashboard mặc định
         self.show_dashboard()
@@ -880,23 +871,6 @@ class MainView(ctk.CTkToplevel):
         # Kiểm tra ngay khi khởi động
         self.after(1000, check)
     
-    def start_session_timer(self):
-        """Bắt đầu đếm thời gian session"""
-        if self.session_timer_id:
-            self.after_cancel(self.session_timer_id)
-        self.session_timer_id = self.after(self.SESSION_TIMEOUT, self.session_expired)
-    
-    def reset_session_timer(self, event=None):
-        """Reset session timer khi có hoạt động"""
-        self.start_session_timer()
-    
-    def session_expired(self):
-        """Xử lý khi session hết hạn"""
-        messagebox.showwarning(
-            "Phiên làm việc hết hạn",
-            "Bạn đã không hoạt động trong 30 phút.\nVui lòng đăng nhập lại!"
-        )
-        self.force_logout()
     
     def force_logout(self):
         """Đăng xuất bắt buộc (không hỏi xác nhận)"""
@@ -906,15 +880,11 @@ class MainView(ctk.CTkToplevel):
     def logout(self):
         """Đăng xuất"""
         if messagebox.askyesno("Xác nhận", "Bạn có chắc chắn muốn đăng xuất?"):
-            if self.session_timer_id:
-                self.after_cancel(self.session_timer_id)
             self.destroy()
             self.parent.deiconify()  # Hiện lại cửa sổ đăng nhập
             
     def on_closing(self):
         """Xử lý đóng cửa sổ"""
         if messagebox.askyesno("Xác nhận", "Bạn có chắc chắn muốn thoát?"):
-            if self.session_timer_id:
-                self.after_cancel(self.session_timer_id)
             self.parent.destroy()
             self.destroy()
